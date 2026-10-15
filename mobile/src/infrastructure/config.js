@@ -3,8 +3,7 @@
  *
  * The backend binds 127.0.0.1 by default, so the iOS simulator can reach it as `localhost`
  * with zero LAN exposure (it shares the Mac's network stack). Android's emulator needs the
- * host-loopback alias, and a physical device needs the Mac's LAN address — which requires the
- * backend to be bound to 0.0.0.0, exposing it to the whole network.
+ * host-loopback alias. Physical-device access is intentionally not enabled by this local setup.
  *
  * That trade-off is why this file is the ONLY place that knows a URL, and why the value comes
  * from EXPO_PUBLIC_API_URL rather than being hardcoded per-platform in several components.
@@ -18,10 +17,10 @@ const { EXPO_PUBLIC_API_URL } = env;
 /** Host loopback alias for the Android emulator. */
 export const ANDROID_EMULATOR_HOST = '10.0.2.2';
 
-export const DEFAULT_PORT = 3000;
+export const DEFAULT_PORT = 5555;
 
 export const LAN_HINT =
-  'Set EXPO_PUBLIC_API_URL=http://<your-mac-lan-ip>:3000 and restart the backend with HOST=0.0.0.0';
+  'Physical-device access is unavailable while the backend is restricted to localhost.';
 
 /**
  * Resolve the API base URL.

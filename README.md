@@ -129,9 +129,9 @@ npx expo prebuild && npx expo run:ios   # dev build: real folder picker
 
 | Where the app runs | `EXPO_PUBLIC_API_URL` | Backend must be |
 |---|---|---|
-| iOS simulator | `http://localhost:3000` | `HOST=127.0.0.1` (default — **no LAN exposure**) |
-| Android emulator | `http://10.0.2.2:3000` | `HOST=127.0.0.1` |
-| Physical phone | `http://<mac-lan-ip>:3000` | `HOST=0.0.0.0` ⚠️ whole LAN |
+| iOS simulator | `http://localhost:5555` | `HOST=127.0.0.1` (default — **no LAN exposure**) |
+| Android emulator | `http://10.0.2.2:5555` | `HOST=127.0.0.1` |
+| Physical phone | Not available with the localhost-only setup | — |
 
 **The app does not parse spreadsheets.** SheetJS needs `fs`/`Buffer` polyfills in React Native,
 and a second copy of the normaliser would inevitably drift. The app picks a folder, reads the
@@ -344,5 +344,5 @@ There is no authentication — this is a single-user tool on your Mac (§ v1.1).
 - **No secrets in the mobile bundle.** The OpenRouter and Google keys live only in `server/.env`.
   A React Native bundle is trivially extractable, so anything shipped there is public.
 - **Backend binds `127.0.0.1` by default.** On the iOS simulator you reach it as `localhost` with
-  zero LAN exposure. Set `HOST=0.0.0.0` only when testing on a physical device, then set it back.
+  zero LAN exposure. Physical-device access is not enabled in this local-only setup.
 - **Journal text is never logged.** Only counts and hashes.

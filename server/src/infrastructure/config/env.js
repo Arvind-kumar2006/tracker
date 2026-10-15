@@ -44,9 +44,8 @@ export const config = {
 
   http: {
     // 127.0.0.1 by default: the simulator reaches it as localhost, with zero LAN exposure.
-    // Set HOST=0.0.0.0 only when testing on a physical device.
     host: optional('HOST', '127.0.0.1'),
-    port: int('PORT', 3000),
+    port: int('PORT', 5555),
     rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
     bodyLimit: optional('BODY_LIMIT', '1mb'),
   },
@@ -67,7 +66,7 @@ export const config = {
       return required('OPENROUTER_API_KEY');
     },
     baseUrl: optional('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
-    appUrl: optional('OPENROUTER_APP_URL', 'http://localhost:3000'),
+    appUrl: optional('OPENROUTER_APP_URL', 'http://localhost:5555'),
     appTitle: optional('OPENROUTER_APP_TITLE', 'Study Accountability Tracker'),
     fastModel: optional('MODEL_FAST', 'google/gemini-2.5-flash'),
     strongModel: optional('MODEL_STRONG', 'anthropic/claude-sonnet-4.6'),

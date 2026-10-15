@@ -456,14 +456,14 @@ the RN app — 5 lines of code, no user system needed.
 
 | Target | Base URL | Backend must bind | Exposure |
 |---|---|---|---|
-| **iOS Simulator** | `http://localhost:3000` | `127.0.0.1` | None — the simulator shares the Mac's network stack |
-| **Android Emulator** | `http://10.0.2.2:3000` | `127.0.0.1` | None — host loopback alias |
-| **Physical device (Expo Go)** | `http://<mac-lan-ip>:3000` | `0.0.0.0` | ⚠️ Whole LAN |
-| **Physical device (dev build)** | `http://<mac-lan-ip>:3000` | `0.0.0.0` | ⚠️ Whole LAN |
+| **iOS Simulator** | `http://localhost:5555` | `127.0.0.1` | None — the simulator shares the Mac's network stack |
+| **Android Emulator** | `http://10.0.2.2:5555` | `127.0.0.1` | None — host loopback alias |
+| **Physical device (Expo Go)** | Not available with the localhost-only setup | — | Local-only backend |
+| **Physical device (dev build)** | Not available with the localhost-only setup | — | Local-only backend |
 
-So: develop on the simulator with the default `127.0.0.1` bind and no LAN exposure at all. When you
-eventually test on a real phone, switch to `0.0.0.0` **only for the duration of that session**, then
-switch back. `BASE_URL` lives in one file, `mobile/src/shared/config.js`, overridable via a single
+So: develop on the simulator with the default `127.0.0.1` bind and no LAN exposure at all. Physical-
+device testing is outside this localhost-only setup. `BASE_URL` lives in one file,
+`mobile/src/shared/config.js`, overridable via a single
 `.env` switch — no other file knows the address.
 
 ---
