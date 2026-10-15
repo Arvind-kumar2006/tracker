@@ -16,8 +16,8 @@ import { uploadRouter } from './uploadRoute.js';
 import { dailyEntryRouter } from './dailyEntryRoute.js';
 import { REFLECTION_QUESTIONS } from '../../domain/entities/reflectionQuestions.js';
 
-export function createApp() {
-  const app = express();
+export function createApp({ expressFactory = express } = {}) {
+  const app = expressFactory();
 
   app.set('trust proxy', false);
   // Mobile folder upload (Phase 4). Mounted FIRST, with its own larger JSON limit, because a

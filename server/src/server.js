@@ -6,8 +6,11 @@
  * exported Express application as a function, so importing it must never open a port.
  */
 
+import express from 'express';
 import { createApp } from './interface/http/server.js';
 
-const app = createApp();
+// Keep the Express import in this recognized Vercel entry point. Vercel's framework detector
+// uses this file to identify the deployment as an Express function.
+const app = createApp({ expressFactory: express });
 
 export default app;
