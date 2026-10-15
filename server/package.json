@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/interface/http/server.js",
     "dev": "node --watch src/interface/http/server.js",
+    "build": "node scripts/vercel-build.js",
     "test": "node --test --test-force-exit --test-concurrency=1 test/*.test.js",
     "lint:boundaries": "eslint . --ext .js",
     "verify:no-secrets": "node scripts/verify-no-secrets.js",
