@@ -460,15 +460,9 @@ export async function start() {
       await bootstrap();
       mongo = (await container.mongo.ping()) ? 'up' : 'down';
     } catch (e) {
-      console.error('[mongo] unavailable:', e.message);
-    }
-    console.log(`\n  Study Accountability Tracker — API`);
-    console.log(`  listening   http://${config.http.host}:${config.http.port}`);
-    console.log(`  mongo       ${mongo}`);
-    console.log(`  watchFolder ${config.ingest.watchFolder}`);
-    console.log(`  openrouter  ${process.env.OPENROUTER_API_KEY ? 'configured' : 'NOT configured (AI routes will 503)'}`);
-    console.log(`  sheets      ${process.env.GOOGLE_SERVICE_ACCOUNT_JSON ? 'configured' : 'NOT configured'}\n`);
-  });
+    console.log(`  listening   http://localhost:${config.http.port}`);
+  }});
+
 
   const bye = async () => {
     server.close();
