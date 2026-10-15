@@ -1,0 +1,14 @@
+{
+  "name": "study-accountability-tracker",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --prefix server && npm install --prefix mobile",
+    "test": "npm --prefix server test && npm --prefix mobile test",
+    "verify": "npm --prefix server run verify && npm --prefix mobile run verify",
+    "server": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev",
+    "mobile": "npm --prefix mobile start",
+    "mobile:ios": "npm --prefix mobile run ios",
+    "mobile:android": "npm --prefix mobile run android"
+  }
+}

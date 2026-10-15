@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Study Accountability Tracker",
+    "slug": "study-accountability-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "studytracker",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.arvindkumar.studytracker",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Select your study tracker spreadsheets to import."
+      }
+    },
+    "android": {
+      "package": "com.arvindkumar.studytracker",
+      "permissions": []
+    },
+    "plugins": [
+      "expo-document-picker",
+      "expo-asset"
+    ]
+  }
+}
