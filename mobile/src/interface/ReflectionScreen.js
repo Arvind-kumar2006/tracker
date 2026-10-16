@@ -1,17 +1,18 @@
 /**
- * ReflectionScreen — the 5-question guided daily reflection.
+ * ReflectionScreen — a five-question guided daily reflection.
  *
- * Replaces the old flat DailyLogScreen. One question per screen with
- * a "Next" button forces the user to think about each answer
- * independently, rather than rushing through a flat form.
+ * Each question gets its own step, but the form is saved as a partial journal entry whenever
+ * the user chooses Save progress. That keeps an interrupted reflection useful instead of making
+ * the user reach question five before anything is persisted.
  */
 
-import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { KeyboardAvoidingView, Platform, View, Text, ScrollView, Pressable, TextInput } from 'react-native';
 import { container } from '../shared/container.js';
-import { REFLECTION_QUESTIONS, emptyReflectionForm, formToPayload } from '../domain/reflection.js';
+import { REFLECTION_QUESTIONS, emptyReflectionForm, entryToForm, formToPayload } from '../domain/reflection.js';
 import { formatDate } from '../domain/index.js';
-import { colors, typography, styles, spacing, radius } from './theme.js';
+import { colors, typography, styles, spacing } from './theme.js';
+import { Banner, Button, EmptyState, LoadingState } from './components.js';
 
 const QUESTION_LABELS = {
   floorHit: 'Did',
@@ -21,182 +22,179 @@ const QUESTION_LABELS = {
   tomorrowChange: 'One thing',
 };
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 export function ReflectionScreen({ route, navigation }) {
-  const date = route.params?.date ?? new Date().toISOString().slice(0, 10);
+  const date = route.params?.date ?? today();
+  const suggestedField = route.params?.suggestionField;
+  const suggestedText = route.params?.suggestionText;
+  const focusHint = route.params?.focusHint;
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(emptyReflectionForm());
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [syncWarning, setSyncWarning] = useState(null);
   const [error, setError] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [planContext, setPlanContext] = useState([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setLoadError(null);
+    setSaved(false);
+    const res = await container.loadDay(date);
+    setLoading(false);
+    if (!res.ok && res.error.status !== 404) {
+      setLoadError(res.error.message);
+      return;
+    }
+    if (!res.ok) {
+      setForm(emptyReflectionForm());
+      setPlanContext([]);
+      return;
+    }
+    const loaded = entryToForm(res.value);
+    if (suggestedField && suggestedText && Object.prototype.hasOwnProperty.call(loaded, suggestedField)) loaded[suggestedField] = suggestedText;
+    setForm(loaded);
+    setPlanContext((res.value.plan?.items ?? []).map((item) => {
+      const focused = Number(item.actualMinutes ?? 0);
+      return item.text ? `${item.text}${focused > 0 ? ` · ${focused}m focused` : ''}` : '';
+    }).filter(Boolean));
+  }, [date, suggestedField, suggestedText]);
+
+  useEffect(() => { load(); }, [load]);
 
   const question = REFLECTION_QUESTIONS[step];
   const isLast = step === REFLECTION_QUESTIONS.length - 1;
 
   const updateField = useCallback((field, value) => {
-    setForm((f) => ({ ...f, [field]: value }));
+    setForm((current) => ({ ...current, [field]: value }));
     setSaved(false);
+    setSyncWarning(null);
   }, []);
 
-  const next = useCallback(() => {
-    if (step < REFLECTION_QUESTIONS.length - 1) {
-      setStep((s) => s + 1);
+  const save = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    setSyncWarning(null);
+    const res = await container.saveDailyEntry({ date, ...formToPayload(form) });
+    setSaving(false);
+    if (!res.ok) {
+      setError(res.error.message);
+      return false;
     }
+    setSaved(true);
+    if (res.value?.sheets && !res.value.sheets.synced && !res.value.sheets.skipped) setSyncWarning(`Saved, but Google Sheets sync failed: ${res.value.sheets.error}`);
+    return true;
+  }, [form, date]);
+
+  const next = useCallback(() => {
+    if (step < REFLECTION_QUESTIONS.length - 1) setStep((current) => current + 1);
   }, [step]);
 
   const back = useCallback(() => {
-    if (step > 0) {
-      setStep((s) => s - 1);
-    }
+    if (step > 0) setStep((current) => current - 1);
   }, [step]);
 
-  const submit = useCallback(async () => {
-    setSaving(true);
-    setError(null);
-    const payload = formToPayload(form);
-    payload.date = date;
-    const res = await container.saveDailyEntry(payload);
-    setSaving(false);
-    if (res.ok) {
-      setSaved(true);
-    } else {
-      setError(res.error.message);
-    }
-  }, [form, date]);
-
-  const checkQuality = useCallback(() => {
-    navigation.navigate('ReflectionQuality', { date });
-  }, [navigation, date]);
+  const checkQuality = useCallback(() => navigation.navigate('ReflectionQuality', { date }), [navigation, date]);
 
   const renderBooleanReason = () => (
     <View>
       <Text style={[typography.small, { marginBottom: spacing.xs }]}>Did you hit your floor?</Text>
       <View style={[styles.wrap, { marginBottom: spacing.md }]}>
-        {[true, false].map((val) => (
+        {[true, false].map((value) => (
           <Pressable
-            key={String(val)}
-            onPress={() => updateField('floorHit', form.floorHit === val ? null : val)}
-            style={[
-              styles.chip,
-              { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-              form.floorHit === val && { borderColor: colors.primary, backgroundColor: colors.primary + '20' },
-            ]}
+            key={String(value)}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={value ? 'Floor hit yes' : 'Floor hit no'}
+            accessibilityState={{ selected: form.floorHit === value }}
+            onPress={() => updateField('floorHit', form.floorHit === value ? null : value)}
+            style={[styles.chip, { paddingHorizontal: spacing.lg }, form.floorHit === value && { borderColor: colors.primary, backgroundColor: colors.primaryTint }]}
           >
-            <Text style={typography.small}>{val ? 'Yes' : 'No'}</Text>
+            <Text style={typography.small}>{value ? 'Yes' : 'No'}</Text>
           </Pressable>
         ))}
       </View>
       <TextInput
+        accessible
+        accessibilityLabel="Floor hit explanation"
         value={form.floorHitReason}
-        onChangeText={(v) => updateField('floorHitReason', v)}
+        onChangeText={(value) => updateField('floorHitReason', value)}
         placeholder={question.placeholder}
         placeholderTextColor={colors.textMuted}
         multiline
-        style={{
-          backgroundColor: colors.surfaceAlt,
-          borderRadius: radius.md,
-          borderWidth: 1,
-          borderColor: colors.border,
-          color: colors.text,
-          padding: spacing.md,
-          marginBottom: spacing.md,
-          minHeight: 80,
-          textAlignVertical: 'top',
-          fontSize: 14,
-        }}
+        style={[styles.input, { minHeight: 88, textAlignVertical: 'top', marginBottom: spacing.md }]}
       />
     </View>
   );
 
   const renderText = () => (
     <TextInput
+      accessible
+      accessibilityLabel={question.question}
       value={form[question.fields[0]]}
-      onChangeText={(v) => updateField(question.fields[0], v)}
+      onChangeText={(value) => updateField(question.fields[0], value)}
       placeholder={question.placeholder}
       placeholderTextColor={colors.textMuted}
       multiline
-      style={{
-        backgroundColor: colors.surfaceAlt,
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: colors.border,
-        color: colors.text,
-        padding: spacing.md,
-        marginBottom: spacing.md,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        fontSize: 14,
-      }}
+      style={[styles.input, { minHeight: 126, textAlignVertical: 'top', marginBottom: spacing.md }]}
     />
   );
 
+  if (loading) return <LoadingState label="Loading your reflection…" />;
+  if (loadError) return <EmptyState title="Reflection unavailable" message={loadError} action="Retry" onAction={load} />;
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={typography.h1}>{formatDate(date)}</Text>
-      <Text style={[typography.small, { marginBottom: spacing.lg }]}>
-        {step + 1} of {REFLECTION_QUESTIONS.length} — {QUESTION_LABELS[question.id]}
-      </Text>
-
-      {error ? (
-        <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: colors.negative, marginBottom: spacing.md }]}>
-          <Text style={[typography.small, { color: colors.negative }]}>{error}</Text>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.rowBetween}>
+          <View style={{ flex: 1, paddingRight: spacing.sm }}>
+            <Text style={typography.h1}>Reflect</Text>
+            <Text style={[typography.small, { marginTop: spacing.xs }]}>{formatDate(date)} · one honest step at a time</Text>
+          </View>
+          <Text style={[typography.small, { color: colors.primarySoft, fontWeight: '700' }]}>{step + 1}/{REFLECTION_QUESTIONS.length}</Text>
         </View>
-      ) : null}
 
-      <View style={[styles.card, { marginBottom: spacing.lg }]}>
-        <Text style={typography.h3}>{question.question}</Text>
-        <Text style={[typography.small, { marginTop: 4, marginBottom: spacing.md, color: colors.textMuted }]}>
-          {question.description}
-        </Text>
+        <View style={[styles.progressTrack, { marginTop: spacing.lg, marginBottom: spacing.lg }]} accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: REFLECTION_QUESTIONS.length, now: step + 1 }}>
+          <View style={[styles.progressFill, { width: `${((step + 1) / REFLECTION_QUESTIONS.length) * 100}%` }]} />
+        </View>
 
-        {question.type === 'boolean-reason' ? renderBooleanReason() : renderText()}
-
-        <Text style={[typography.tiny, { color: colors.textMuted }]}>{question.hint}</Text>
-      </View>
-
-      <View style={[styles.row, { marginTop: spacing.md }]}>
-        {step > 0 ? (
-          <Pressable
-            onPress={back}
-            style={[styles.button, { flex: 1, marginRight: spacing.sm, backgroundColor: colors.surfaceAlt }]}
-          >
-            <Text style={{ color: colors.text, fontWeight: '600' }}>Back</Text>
-          </Pressable>
+        {planContext.length ? (
+          <View style={[styles.card, { marginBottom: spacing.md }]}>
+            <Text style={typography.tiny}>TODAY'S PLAN</Text>
+            {planContext.map((item, index) => <Text key={`${item}-${index}`} style={[typography.small, { marginTop: spacing.xs }]}>• {item}</Text>)}
+          </View>
         ) : null}
 
-        {!isLast ? (
-          <Pressable
-            onPress={next}
-            style={[styles.button, { flex: 1, marginLeft: step > 0 ? spacing.sm : 0 }]}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600' }}>Next</Text>
-          </Pressable>
-        ) : null}
-      </View>
+        {error ? <Banner tone="negative">{error}</Banner> : null}
 
-      {isLast ? (
-        <View style={{ marginTop: spacing.md }}>
-          <Pressable
-            onPress={submit}
-            disabled={saving}
-            style={[styles.button, saving && styles.buttonDisabled]}
-          >
-            <Text style={{ color: '#fff', fontWeight: '600' }}>
-              {saving ? 'Saving…' : saved ? 'Saved' : 'Save reflection'}
-            </Text>
-          </Pressable>
-
-          {saved ? (
-            <View style={{ marginTop: spacing.md }}>
-              <Text style={[typography.small, { color: colors.positive, marginBottom: spacing.sm }]}>
-                Reflection saved.
-              </Text>
-              <Pressable onPress={checkQuality} style={[styles.button, { backgroundColor: colors.surfaceAlt }]}>
-                <Text style={{ color: colors.primary, fontWeight: '600' }}>Check quality</Text>
-              </Pressable>
-            </View>
-          ) : null}
+        <View style={[styles.card, { marginBottom: spacing.lg }]}>
+          <Text style={typography.tiny}>{QUESTION_LABELS[question.id].toUpperCase()}</Text>
+          <Text style={[typography.h2, { marginTop: spacing.xs }]}>{question.question}</Text>
+          <Text style={[typography.small, { marginTop: spacing.xs, marginBottom: spacing.md }]}>{question.description}</Text>
+          {focusHint ? <Banner tone="warning">Follow-up: {focusHint}</Banner> : null}
+          {question.type === 'boolean-reason' ? renderBooleanReason() : renderText()}
+          <Text style={typography.tiny}>{question.hint}</Text>
         </View>
-      ) : null}
-    </ScrollView>
+
+        <Button label={saved ? 'Saved' : 'Save progress'} variant="secondary" onPress={save} loading={saving} disabled={saving} />
+
+        <View style={[styles.row, { marginTop: spacing.sm }]}>
+          {step > 0 ? <Button label="Back" variant="ghost" onPress={back} style={{ flex: 1, marginRight: spacing.sm }} /> : <View style={{ flex: 1, marginRight: spacing.sm }} />}
+          {!isLast ? <Button label="Next question" onPress={next} style={{ flex: 1 }} /> : <Button label="Save reflection" onPress={save} loading={saving} disabled={saving} style={{ flex: 1 }} />}
+        </View>
+
+        {saved ? (
+          <View style={{ marginTop: spacing.lg }}>
+            <Banner tone="positive">Reflection saved. You can leave now and continue later.</Banner>
+            {syncWarning ? <Banner tone="warning">{syncWarning}</Banner> : null}
+            {isLast ? <Button label="Check quality" variant="secondary" onPress={checkQuality} /> : null}
+          </View>
+        ) : null}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

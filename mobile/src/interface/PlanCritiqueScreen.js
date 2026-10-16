@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { container } from '../shared/container.js';
 import { colors, typography, styles, spacing, radius } from './theme.js';
-import { Banner, EmptyState, Chip } from './components.js';
+import { Banner, EmptyState, Chip, LoadingState, Button } from './components.js';
 import { formatDate } from '../domain/index.js';
 import {
   AXES, AXIS_ORDER, BAND_COLOR, BAND_LABEL, band, critiqueStats, critiqueSummary,
@@ -113,6 +113,8 @@ export function PlanCritiqueScreen() {
   const stats = useMemo(() => critiqueStats(rows ?? []), [rows]);
   const sorted = useMemo(() => sortCritiques(rows ?? []), [rows]);
 
+  if (rows === null && !error) return <LoadingState label="Loading plan quality…" />;
+
   return (
     <ScrollView
       style={styles.screen}
@@ -125,6 +127,8 @@ export function PlanCritiqueScreen() {
       </Text>
 
       {error ? <Banner tone="negative">{error}</Banner> : null}
+
+      {error && rows === null ? <Button label="Retry" variant="secondary" onPress={load} /> : null}
 
       {rows && rows.length === 0 ? (
         <EmptyState

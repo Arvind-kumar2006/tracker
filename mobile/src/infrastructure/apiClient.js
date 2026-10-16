@@ -62,6 +62,7 @@ export function createApiClient() {
     getMonth: (m) => request(endpoints.month(m)),
     getDays: (m, { withData = false } = {}) =>
       request(`${endpoints.days(m)}${withData ? '?withData=true' : ''}`),
+    getDay: (date) => request(endpoints.day(date)),
     getMetrics: (m) => request(endpoints.metrics(m)),
     getPrecheck: (m, { asOf } = {}) =>
       request(`${endpoints.precheck(m)}${asOf ? `?asOf=${asOf}` : ''}`),
@@ -77,7 +78,36 @@ export function createApiClient() {
     resolveQuarantine: (id) => request(endpoints.resolveQuarantine(id), { method: 'POST', body: {} }),
 
     /** Write a daily entry created in the app. */
-    saveDailyEntry: (entry) => request(`${endpoints.day(entry.date)}`, { method: 'PUT', body: entry }),
+    saveDailyEntry: (entry) => request(`${endpoints.day(entry.date)}`, {
+      method: 'PUT',
+      body: entry,
+      timeoutMs: config.saveTimeoutMs,
+    }),
+    saveDailyPlan: (date, plan) => request(endpoints.plan(date), {
+      method: 'PUT',
+      body: plan,
+      timeoutMs: config.saveTimeoutMs,
+    }),
+    carryForwardPlan: (date, targetDate) => request(endpoints.planCarryForward(date), {
+      method: 'POST',
+      body: { targetDate },
+      timeoutMs: config.saveTimeoutMs,
+    }),
+    generateDailyPlan: (date, input) => request(endpoints.planGenerate(date), {
+      method: 'POST',
+      body: input,
+      timeoutMs: config.analysisTimeoutMs,
+    }),
+    checkDailyPlan: (date, plan) => request(endpoints.planCheck(date), {
+      method: 'POST',
+      body: plan,
+      timeoutMs: config.analysisTimeoutMs,
+    }),
+    saveFocusSession: (date, session) => request(endpoints.focusSessions(date), {
+      method: 'POST',
+      body: session,
+      timeoutMs: config.saveTimeoutMs,
+    }),
 
     /** Large base64 payload — needs the longer timeout. */
     uploadWorkbooks: (files, opts = {}) =>

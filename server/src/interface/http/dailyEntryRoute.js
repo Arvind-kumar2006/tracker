@@ -69,6 +69,7 @@ export function buildEntryFromInput({ date, payload }) {
     buildOutcome !== null ||
     targetMet !== null ||
     floorHit !== null ||
+    floorHitReason !== '' ||
     planBend !== '';
 
   const [y, m, d] = date.split('-').map(Number);
@@ -105,8 +106,9 @@ export function buildEntryFromInput({ date, payload }) {
   };
 }
 
-export async function saveDailyEntry({ date, payload, repositories }) {
+export async function saveDailyEntry({ date, payload, repositories, sheetsSync = null }) {
   const { dailyLogRepository, monthRepository } = repositories;
+  const existing = await dailyLogRepository.findByDate(date);
 
   let entry;
   try {
@@ -115,19 +117,58 @@ export async function saveDailyEntry({ date, payload, repositories }) {
     return err(e instanceof DomainError ? e : new DomainError(ErrorCode.UNPARSEABLE_VALUE, e.message));
   }
 
+  // Reflection is a partial update. Preserve imported plans, time blocks, measured minutes, and
+  // provenance instead of replacing them with the empty values used by the reflection payload.
+  if (existing) {
+    entry = {
+      ...existing,
+      ...entry,
+      // `plannedHours` is a legacy reflection field. If it is submitted, update only the
+      // declared-hours value and keep the actual task list from the existing plan.
+      plan: Object.prototype.hasOwnProperty.call(payload, 'plannedHours')
+        ? { ...(existing.plan ?? entry.plan), declaredHours: entry.plan.declaredHours }
+        : existing.plan,
+      minutes: existing.minutes ?? entry.minutes,
+      timeBlocks: existing.timeBlocks ?? entry.timeBlocks,
+      sourceFile: existing.sourceFile ?? entry.sourceFile,
+      origin: existing.origin ?? entry.origin,
+      hasData: Boolean(existing.hasData || entry.hasData),
+    };
+  }
+
+  // A changed reflection invalidates the previous per-day analysis. Keep the original answers
+  // and all recorded plan/focus data, but force the next quality request to analyse the new text.
+  entry.reflectionAnalysis = null;
+
   const write = await dailyLogRepository.upsertMany([entry], { fileName: null });
 
   // Keep the month rollup consistent with the write.
   const entries = await dailyLogRepository.findByMonth(entry.month);
   const metrics = calculateMetrics({ entries, month: entry.month, asOf: new Date().toISOString().slice(0, 10) });
-  const existing = await monthRepository.find(entry.month);
-  await monthRepository.upsert(entry.month, metrics, existing?.monthlyGoal ?? null, existing?.targetDailyHours ?? null);
+  const existingMonth = await monthRepository.find(entry.month);
+  await monthRepository.upsert(entry.month, metrics, existingMonth?.monthlyGoal ?? null, existingMonth?.targetDailyHours ?? null);
 
   const saved = await dailyLogRepository.findByDate(date);
+
+  // Mongo is the source of truth. Mirror to Sheets after the durable write, but never turn a
+  // successful journal save into a failure just because Google is temporarily unavailable.
+  let sheets = { synced: false, skipped: true };
+  if (sheetsSync) {
+    try {
+      const mirror = await sheetsSync(entry.month);
+      sheets = mirror?.ok
+        ? { synced: true, totals: mirror.value?.totals ?? null }
+        : { synced: false, error: mirror?.error?.message ?? 'Google Sheets sync failed' };
+    } catch (e) {
+      sheets = { synced: false, error: e.message };
+    }
+  }
+
   return ok({
     date,
     written: write,
     entry: saved,
+    sheets,
     // Surfaced so the app can tell the user their new entry is eligible for analysis.
     constraints: extractConstraints(entries).length,
   });
@@ -135,6 +176,17 @@ export async function saveDailyEntry({ date, payload, repositories }) {
 
 export function dailyEntryRouter() {
   const router = express.Router();
+
+  router.get('/api/days/:date', async (req, res) => {
+    await bootstrap();
+    const entry = await container.dailyLogRepository.findByDate(req.params.date);
+    if (!entry) {
+      return res.status(404).json({
+        error: { code: 'NOT_FOUND', message: `No entry exists for ${req.params.date}.` },
+      });
+    }
+    res.json(entry);
+  });
 
   router.put('/api/days/:date', async (req, res) => {
     await bootstrap();
@@ -145,6 +197,7 @@ export function dailyEntryRouter() {
         dailyLogRepository: container.dailyLogRepository,
         monthRepository: container.monthRepository,
       },
+      sheetsSync: (month) => container.syncMonthToSheets(month),
     });
     if (!result.ok) return res.status(400).json({ error: result.error.toJSON() });
     res.json(result.value);

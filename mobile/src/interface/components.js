@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { ActivityIndicator, View, Text, Pressable } from 'react-native';
 import { colors, typography, styles, radius, spacing, toneColor } from './theme.js';
 import { formatDate, TONE_COLORS, describeBuildOutcome } from '../domain/index.js';
 
@@ -9,15 +9,109 @@ const Chip = ({ label, tone = 'neutral', style }) => (
   </View>
 );
 
+export const Button = ({ label, onPress, variant = 'primary', loading = false, disabled = false, style, accessibilityLabel }) => {
+  const secondary = variant === 'secondary';
+  const ghost = variant === 'ghost';
+  return (
+    <Pressable
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={({ pressed }) => [
+        styles.button,
+        secondary && styles.buttonSecondary,
+        ghost && styles.buttonGhost,
+        (disabled || loading) && styles.buttonDisabled,
+        pressed && !disabled && !loading && { opacity: 0.82 },
+        style,
+      ]}
+    >
+      {loading ? <ActivityIndicator color={secondary || ghost ? colors.primarySoft : colors.white} /> : (
+        <Text style={secondary || ghost ? styles.buttonSecondaryText : styles.buttonText}>{label}</Text>
+      )}
+    </Pressable>
+  );
+};
+
+export const SectionHeader = ({ title, action, onAction }) => (
+  <View style={[styles.rowBetween, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
+    <Text style={styles.sectionTitle}>{title}</Text>
+    {action ? (
+      <Pressable accessible accessibilityRole="button" accessibilityLabel={action} onPress={onAction} hitSlop={8}>
+        <Text style={[typography.small, { color: colors.primarySoft, fontWeight: '700' }]}>{action}</Text>
+      </Pressable>
+    ) : null}
+  </View>
+);
+
+export const ProgressBar = ({ value = 0, tone = 'primary', label, detail }) => {
+  const fillColor = tone === 'positive' ? colors.positive : tone === 'warning' ? colors.warning : colors.primarySoft;
+  const percentage = Math.max(0, Math.min(1, Number(value) || 0));
+  return (
+    <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 1, now: percentage }}>
+      {label || detail ? (
+        <View style={[styles.rowBetween, { marginBottom: spacing.xs }]}>
+          {label ? <Text style={typography.small}>{label}</Text> : <View />}
+          {detail ? <Text style={[typography.small, { color: colors.text }]}>{detail}</Text> : null}
+        </View>
+      ) : null}
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${percentage * 100}%`, backgroundColor: fillColor }]} />
+      </View>
+    </View>
+  );
+};
+
+export const StatusPill = ({ label, tone = 'neutral' }) => (
+  <View style={[styles.chip, { borderColor: toneColor(tone), backgroundColor: `${toneColor(tone)}18` }]}>
+    <Text style={[typography.tiny, { color: toneColor(tone), fontWeight: '700' }]}>{label}</Text>
+  </View>
+);
+
+export const TaskCard = ({ item, onStart, onRemove, compact = false }) => {
+  const done = item.status === 'DONE' || (Number(item.estimatedMinutes) > 0 && Number(item.actualMinutes ?? 0) >= Number(item.estimatedMinutes));
+  const actual = Number(item.actualMinutes ?? 0);
+  const estimated = Number(item.estimatedMinutes ?? 0);
+  return (
+    <View style={[styles.card, compact && { padding: spacing.md, marginBottom: spacing.sm }]}>
+      <View style={styles.rowBetween}>
+        <View style={{ flex: 1, paddingRight: spacing.sm }}>
+          <Text style={typography.h3}>{item.text || 'Untitled priority'}</Text>
+          {item.outcome ? <Text style={[typography.small, { marginTop: 3 }]}>{item.outcome}</Text> : null}
+        </View>
+        <StatusPill label={done ? 'DONE' : actual > 0 ? 'IN PROGRESS' : (item.priority ?? 'PLANNED')} tone={done ? 'positive' : actual > 0 ? 'warning' : 'neutral'} />
+      </View>
+      {estimated > 0 ? (
+        <View style={{ marginTop: spacing.md }}>
+          <ProgressBar value={actual / estimated} label="Focused" detail={`${actual}/${estimated} min`} tone={done ? 'positive' : 'primary'} />
+        </View>
+      ) : null}
+      {(onStart || onRemove) ? (
+        <View style={[styles.rowBetween, { marginTop: spacing.md }]}>
+          {onStart ? <Button label="Start focus" variant="secondary" onPress={onStart} style={{ flex: 1, marginRight: onRemove ? spacing.sm : 0 }} /> : <View />}
+          {onRemove ? (
+            <Pressable accessible accessibilityRole="button" accessibilityLabel="Remove priority" onPress={onRemove} hitSlop={8} style={styles.buttonGhost}>
+              <Text style={[typography.small, { color: colors.negative, fontWeight: '700' }]}>Remove</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
 export const StatCard = ({ label, value, sub, tone = 'neutral' }) => (
   <View
     style={[
       styles.card,
-      { flex: 1, minWidth: 150, marginRight: spacing.sm, marginBottom: spacing.sm, padding: spacing.md },
+      { flex: 1, minWidth: 140, marginRight: spacing.sm, marginBottom: spacing.sm, padding: spacing.md },
     ]}
   >
     <Text style={typography.tiny}>{label.toUpperCase()}</Text>
-    <Text style={{ ...typography.h1, marginTop: 2 }}>{value}</Text>
+    <Text style={{ ...typography.h2, marginTop: 4, color: toneColor(tone) }}>{value}</Text>
     {sub ? <Text style={[typography.tiny, { marginTop: 2 }]}>{sub}</Text> : null}
   </View>
 );
@@ -145,15 +239,16 @@ export const InsightCard = ({ insight, onStatus, testID }) => {
   );
 };
 
-export const EmptyState = ({ title, message, action, onAction }) => (
+export const EmptyState = ({ title, message, action, onAction, icon = '○' }) => (
   <View style={[styles.card, { alignItems: 'center', paddingVertical: spacing.xl }]}>
+    <Text style={{ fontSize: 28, color: colors.primarySoft, marginBottom: spacing.sm }}>{icon}</Text>
     <Text style={[typography.h3, { textAlign: 'center' }]}>{title}</Text>
     {message ? (
       <Text style={[typography.small, { textAlign: 'center', marginTop: spacing.sm, lineHeight: 19 }]}>{message}</Text>
     ) : null}
     {action ? (
-      <Pressable onPress={onAction} style={[styles.button, { marginTop: spacing.lg, paddingHorizontal: spacing.xl }]}>
-        <Text style={{ color: '#fff', fontWeight: '600' }}>{action}</Text>
+      <Pressable accessible accessibilityRole="button" accessibilityLabel={action} onPress={onAction} style={[styles.button, { marginTop: spacing.lg, paddingHorizontal: spacing.xl }]}>
+        <Text style={styles.buttonText}>{action}</Text>
       </Pressable>
     ) : null}
   </View>
@@ -162,7 +257,7 @@ export const EmptyState = ({ title, message, action, onAction }) => (
 export const Banner = ({ tone = 'neutral', children }) => (
   <View
     style={{
-      backgroundColor: colors.surfaceAlt,
+      backgroundColor: tone === 'positive' ? colors.positiveTint : tone === 'warning' ? colors.warningTint : tone === 'negative' ? colors.negativeTint : colors.surfaceAlt,
       borderLeftWidth: 3,
       borderLeftColor: toneColor(tone),
       borderRadius: radius.sm,
@@ -170,7 +265,14 @@ export const Banner = ({ tone = 'neutral', children }) => (
       marginBottom: spacing.md,
     }}
   >
-    <Text style={typography.small}>{children}</Text>
+    <Text style={[typography.small, { color: tone === 'neutral' ? colors.textMuted : colors.text }]}>{children}</Text>
+  </View>
+);
+
+export const LoadingState = ({ label = 'Loading…' }) => (
+  <View style={[styles.screen, { alignItems: 'center', justifyContent: 'center', padding: spacing.xl }]}>
+    <ActivityIndicator color={colors.primarySoft} size="small" />
+    <Text style={[typography.small, { marginTop: spacing.md }]}>{label}</Text>
   </View>
 );
 

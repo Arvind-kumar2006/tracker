@@ -11,7 +11,8 @@ import { View, Text, ScrollView, Pressable } from 'react-native';
 import { container } from '../shared/container.js';
 import { buildQualityViewModel } from '../domain/reflection.js';
 import { formatDate } from '../domain/index.js';
-import { colors, typography, styles, spacing, radius } from './theme.js';
+import { colors, typography, styles, spacing } from './theme.js';
+import { Banner, Button, LoadingState, StatusPill } from './components.js';
 
 const FIELD_LABELS = {
   floorHit: 'Did (floor hit)',
@@ -32,6 +33,8 @@ export function ReflectionQualityScreen({ route, navigation }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState([]);
+  const [dismissedFollowUps, setDismissedFollowUps] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,11 +52,7 @@ export function ReflectionQualityScreen({ route, navigation }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return (
-      <View style={styles.screen}>
-        <Text style={[styles.content, typography.body]}>Checking quality…</Text>
-      </View>
-    );
+    return <LoadingState label="Checking your reflection…" />;
   }
 
   if (error) {
@@ -80,6 +79,11 @@ export function ReflectionQualityScreen({ route, navigation }) {
   }
 
   const toneColor = TONE_COLORS[report.tone] ?? colors.textMuted;
+  const statusLabel = report.status === 'needs_clarification'
+    ? 'NEEDS CLARIFICATION'
+    : report.status === 'fallback'
+      ? 'DETERMINISTIC FALLBACK'
+      : 'ANALYSIS COMPLETE';
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -102,7 +106,58 @@ export function ReflectionQualityScreen({ route, navigation }) {
             {report.summary}
           </Text>
         ) : null}
+        <View style={[styles.row, { marginTop: spacing.md }]}>
+          <StatusPill label={statusLabel} tone={report.status === 'fallback' ? 'warning' : report.status === 'needs_clarification' ? 'warning' : 'positive'} />
+          <Text style={[typography.tiny, { marginLeft: spacing.sm }]}>confidence: {report.confidence}</Text>
+        </View>
       </View>
+
+      {report.qualitySource === 'mechanical' ? <Banner tone="warning">AI review was unavailable. These facts and suggestions were generated deterministically; you can retry later without resaving your reflection.</Banner> : null}
+
+      {report.observations.length ? (
+        <View style={styles.card}>
+          <Text style={typography.h3}>Observed facts</Text>
+          {report.observations.map((item, index) => (
+            <View key={`observation-${index}`} style={{ marginTop: spacing.sm }}>
+              <Text style={typography.body}>• {item.text}</Text>
+              <Text style={typography.tiny}>Evidence linked</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {report.interpretations.length ? (
+        <View style={styles.card}>
+          <Text style={typography.h3}>What may explain it</Text>
+          <Text style={[typography.tiny, { marginTop: spacing.xs }]}>These are hypotheses, not proven causes.</Text>
+          {report.interpretations.map((item, index) => (
+            <View key={`interpretation-${index}`} style={{ marginTop: spacing.sm }}>
+              <Text style={typography.body}>• {item.text}</Text>
+              <Text style={typography.tiny}>Confidence: {item.confidence}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {report.mainBottleneck ? (
+        <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: colors.warning }]}>
+          <Text style={typography.tiny}>MAIN BOTTLENECK</Text>
+          <Text style={[typography.body, { marginTop: spacing.xs }]}>{report.mainBottleneck.text}</Text>
+        </View>
+      ) : null}
+
+      {report.recommendations.length ? (
+        <View style={styles.card}>
+          <Text style={typography.h3}>For tomorrow</Text>
+          {report.recommendations.map((item, index) => (
+            <View key={`recommendation-${index}`} style={{ marginTop: spacing.md }}>
+              <Text style={typography.body}>• {item.action}</Text>
+              <Text style={[typography.small, { marginTop: 2 }]}>{item.why}</Text>
+            </View>
+          ))}
+          {report.followUpMeasure ? <Banner tone="neutral">Track this: {report.followUpMeasure}</Banner> : null}
+        </View>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Per question</Text>
       {report.fields.map((f) => (
@@ -124,15 +179,51 @@ export function ReflectionQualityScreen({ route, navigation }) {
               {f.reason}
             </Text>
           )}
+          {f.suggestion && !dismissedSuggestions.includes(f.fieldId) ? (
+            <View style={{ marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <Text style={[typography.tiny, { color: colors.primary }]}>OPTIONAL SUGGESTION</Text>
+              <Text style={[typography.small, { marginTop: spacing.xs }]}>{f.suggestion}</Text>
+              <View style={[styles.row, { marginTop: spacing.sm }]}>
+                <Pressable
+                  onPress={() => navigation.navigate('Reflection', { date, suggestionField: f.fieldId, focusHint: f.suggestion })}
+                  style={[styles.button, { flex: 1, marginRight: spacing.sm, paddingVertical: spacing.sm }]}
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel={`Answer ${FIELD_LABELS[f.fieldId] ?? f.fieldId}`}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>Use to edit</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setDismissedSuggestions((current) => [...current, f.fieldId])}
+                  style={[styles.button, styles.buttonSecondary, { flex: 1, paddingVertical: spacing.sm }]}
+                >
+                  <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 12 }}>Keep original</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
         </View>
       ))}
 
-      {report.followUpQuestions.length > 0 ? (
+      {report.followUpQuestions.filter((fq) => !dismissedFollowUps.includes(fq.fieldId)).length > 0 ? (
         <>
           <Text style={styles.sectionTitle}>Follow-up questions</Text>
-          {report.followUpQuestions.map((fq, i) => (
+          {report.followUpQuestions.filter((fq) => !dismissedFollowUps.includes(fq.fieldId)).map((fq, i) => (
             <View key={i} style={[styles.card, { marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary }]}>
               <Text style={[typography.small]}>{fq.question}</Text>
+              {fq.choices?.length ? (
+                <View style={[styles.wrap, { marginTop: spacing.sm }]}>
+                  {fq.choices.map((choice) => (
+                    <Pressable key={choice} accessible accessibilityRole="button" onPress={() => navigation.navigate('Reflection', { date, suggestionField: fq.fieldId, focusHint: `${fq.question} Possible angle: ${choice}` })} style={styles.chip}>
+                      <Text style={typography.tiny}>{choice}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              <View style={[styles.row, { marginTop: spacing.sm }]}>
+                <Button label="Answer this" variant="secondary" onPress={() => navigation.navigate('Reflection', { date, suggestionField: fq.fieldId, focusHint: fq.question })} style={{ flex: 1, marginRight: spacing.sm }} />
+                <Button label="Skip" variant="ghost" onPress={() => setDismissedFollowUps((current) => [...current, fq.fieldId])} />
+              </View>
             </View>
           ))}
         </>

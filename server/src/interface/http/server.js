@@ -14,7 +14,11 @@ import { getLogLevel } from '../../shared/logger.js';
 import { budgets, budgets as _b } from '../../shared/diagnostics.js';
 import { uploadRouter } from './uploadRoute.js';
 import { dailyEntryRouter } from './dailyEntryRoute.js';
+import { dailyPlanRouter } from './dailyPlanRoute.js';
+import { focusSessionRouter } from './focusSessionRoute.js';
 import { REFLECTION_QUESTIONS } from '../../domain/entities/reflectionQuestions.js';
+import { buildMechanicalReflectionQualityReport } from '../../infrastructure/ai/graphs/reflectionQualityGraph.js';
+import { parseServiceAccount } from '../../infrastructure/sheets/googleSheetsClient.js';
 
 export function createApp({ expressFactory = express } = {}) {
   const app = expressFactory();
@@ -24,6 +28,8 @@ export function createApp({ expressFactory = express } = {}) {
   // base64 spreadsheet easily exceeds the app-wide 1mb cap used for ordinary API calls.
   app.use(uploadRouter());
   app.use(dailyEntryRouter());
+  app.use(dailyPlanRouter());
+  app.use(focusSessionRouter());
 
   /**
    * Every mutating route below takes JSON.
@@ -286,31 +292,65 @@ export function createApp({ expressFactory = express } = {}) {
   app.get('/api/reflection-quality/:date', async (req, res) => {
     await bootstrap();
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      return res.status(503).json({
-        error: {
-          code: 'NO_PROVIDER',
-          message: 'OPENROUTER_API_KEY is not configured on the server. Set it in server/.env.',
-        },
-      });
-    }
-
-    const { buildReflectionQualityGraph } = await import(
-      '../../infrastructure/ai/graphs/reflectionQualityGraph.js'
-    );
-    const { createOpenRouterAdapter } = await import(
-      '../../infrastructure/ai/openRouterClient.js'
-    );
-
     const entry = await container.dailyLogRepository.findByDate(req.params.date);
     if (!entry) {
       return res.status(404).json({ error: 'no entry for that date' });
     }
 
-    const graph = buildReflectionQualityGraph({ llm: createOpenRouterAdapter() });
-    const result = await graph.invoke({ date: req.params.date, entry });
+    const history = entry.month
+      ? await container.dailyLogRepository.findByMonth(entry.month)
+      : [entry];
+    const mechanicalWarning = 'AI review is unavailable; showing deterministic quality checks.';
+    const persistReport = async (report) => {
+      const stored = {
+        ...report,
+        generatedAt: new Date().toISOString(),
+      };
+      await container.dailyLogRepository.updateReflectionAnalysis(req.params.date, stored);
+      return stored;
+    };
 
-    res.json(result.report ?? { error: 'graph produced no report', errors: result.errors });
+    if (!process.env.OPENROUTER_API_KEY) {
+      return res.json(await persistReport({
+        ...buildMechanicalReflectionQualityReport({ date: req.params.date, entry, history, warning: mechanicalWarning }),
+        qualitySource: 'mechanical',
+      }));
+    }
+
+    try {
+      const { buildReflectionQualityGraph } = await import(
+        '../../infrastructure/ai/graphs/reflectionQualityGraph.js'
+      );
+      const { createOpenRouterAdapter } = await import(
+        '../../infrastructure/ai/openRouterClient.js'
+      );
+
+      const graph = buildReflectionQualityGraph({ llm: createOpenRouterAdapter() });
+      const result = await graph.invoke(
+        { date: req.params.date, entry, history },
+        { configurable: { thread_id: `reflection-quality-${req.params.date}` } }
+      );
+
+      // The graph already falls back to mechanical validation when the provider fails. Surface
+      // that state to the app instead of turning a provider 5xx into a useless 502 screen.
+      return res.json(await persistReport({
+        ...(result.report ?? buildMechanicalReflectionQualityReport({
+          date: req.params.date,
+          entry,
+          history,
+          warning: mechanicalWarning,
+        })),
+        qualitySource: result.errors?.length ? 'mechanical' : 'ai',
+        ...(result.errors?.length ? { warning: mechanicalWarning } : {}),
+      }));
+    } catch {
+      // AI construction/import/provider failures must not prevent the user from seeing the
+      // deterministic quality result for answers that were already saved in Mongo.
+      return res.json(await persistReport({
+        ...buildMechanicalReflectionQualityReport({ date: req.params.date, entry, history, warning: mechanicalWarning }),
+        qualitySource: 'mechanical',
+      }));
+    }
   });
 
   /* --- Google Sheets mirror (Phase 2) ------------------------------ */
@@ -318,11 +358,24 @@ export function createApp({ expressFactory = express } = {}) {
   app.get('/api/sheets/status', async (_req, res) => {
     await bootstrap();
     const id = await container.settingsRepository.get('sheets.spreadsheetId', null) ?? config.sheets.spreadsheetId;
+    let credentialsValid = false;
+    let credentialError = null;
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      try {
+        parseServiceAccount(config.sheets.serviceAccountJson);
+        credentialsValid = true;
+      } catch {
+        credentialError = 'Google Sheets credentials are invalid. Replace GOOGLE_SERVICE_ACCOUNT_JSON with the complete service-account JSON.';
+      }
+    }
     res.json({
       connected: Boolean(id),
+      syncReady: Boolean(id && credentialsValid),
       spreadsheetId: id,
       url: id ? `https://docs.google.com/spreadsheets/d/${id}/edit` : null,
       credentialsConfigured: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+      credentialsValid,
+      credentialError,
       // Without this a service-account-owned workbook is invisible to the human.
       userEmailConfigured: Boolean(process.env.GOOGLE_USER_EMAIL),
       tabs: Object.values(
@@ -460,7 +513,7 @@ export async function start() {
       await bootstrap();
       mongo = (await container.mongo.ping()) ? 'up' : 'down';
     } catch (e) {
-    console.log(`  listening   http://localhost:${config.http.port}`);
+    console.log(`  listening   http://${config.http.host}:${config.http.port}`);
   }});
 
 

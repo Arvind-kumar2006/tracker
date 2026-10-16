@@ -74,6 +74,48 @@ test('oversized text is clamped', () => {
   assert.ok(e.accomplished.length <= 4000);
 });
 
+test('reflection update preserves an existing plan and measured sessions', async () => {
+  let stored = {
+    ...buildEntryFromInput({ date: '2026-10-14', payload: {} }),
+    hasData: true,
+    plan: {
+      items: [{ id: '2026-10-14-1', n: 1, text: 'Build API', estimatedMinutes: 60, actualMinutes: 25 }],
+      summary: 'Build API',
+      declaredHours: 1,
+      minimumMinutes: 30,
+      idealMinutes: 60,
+      breakMinutes: 10,
+      bufferMinutes: 10,
+    },
+    focusSessions: [{ id: 'session-1', durationMinutes: 25 }],
+    reflectionAnalysis: { status: 'complete', recommendations: [{ action: 'old advice' }] },
+  };
+  const repositories = {
+    dailyLogRepository: {
+      findByDate: async () => stored,
+      findByMonth: async () => [stored],
+      upsertMany: async ([entry]) => { stored = entry; return { matched: 1, modified: 1 }; },
+    },
+    monthRepository: {
+      find: async () => null,
+      upsert: async () => {},
+    },
+  };
+
+  const result = await saveDailyEntry({
+    date: '2026-10-14',
+    payload: { accomplished: 'Shipped the first endpoint.' },
+    repositories,
+  });
+
+  assert.ok(result.ok, result.ok ? '' : result.error.message);
+  assert.equal(stored.plan.items[0].text, 'Build API');
+  assert.equal(stored.plan.items[0].actualMinutes, 25);
+  assert.equal(stored.focusSessions[0].durationMinutes, 25);
+  assert.equal(stored.accomplished, 'Shipped the first endpoint.');
+  assert.equal(stored.reflectionAnalysis, null, 'editing the reflection must invalidate stale analysis');
+});
+
 /* ================================================================== *
  * Upload parsing (no database needed)
  * ================================================================== */

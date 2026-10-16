@@ -9,6 +9,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildReflectionQualityGraph } from '../src/infrastructure/ai/graphs/reflectionQualityGraph.js';
 import { checkReflectionQuality } from '../src/domain/services/ReflectionQualityChecker.js';
+import {
+  buildReflectionEvidence,
+  validateReflectionCoaching,
+  buildDeterministicReflectionCoaching,
+} from '../src/domain/services/ReflectionCoaching.js';
 
 /* ------------------------------------------------------------------ */
 /* Fake LLM                                                            */
@@ -75,6 +80,19 @@ test('checkReflectionQuality: vague answers are flagged', () => {
   assert.ok(result.vagueCount >= 3);
 });
 
+test('checkReflectionQuality: Mongo blocker objects are normalized as reflection text', () => {
+  const result = checkReflectionQuality({
+    floorHit: true,
+    floorHitReason: 'Completed the minimum block',
+    accomplished: 'Finished module 3',
+    blockers: { raw: 'Phone notifications interrupted the 7pm focus block', segments: ['Phone notifications interrupted the 7pm focus block'] },
+    planBend: 'Started 30 minutes late',
+    tomorrowChange: 'Put phone in another room',
+  });
+
+  assert.equal(result.fields.find((field) => field.fieldId === 'blockers').isVague, false);
+});
+
 test('checkReflectionQuality: floorHit without reason is vague', () => {
   const entry = {
     floorHit: true,
@@ -88,6 +106,94 @@ test('checkReflectionQuality: floorHit without reason is vague', () => {
   const result = checkReflectionQuality(entry);
   const floorField = result.fields.find((f) => f.fieldId === 'floorHit');
   assert.ok(floorField.isVague);
+});
+
+test('deterministic checker distinguishes vague statements from useful short answers', () => {
+  const vague = checkReflectionQuality({
+    floorHit: true,
+    floorHitReason: 'Everything was fine',
+    accomplished: 'I wasted time',
+    blockers: 'I was lazy',
+    planBend: 'The plan changed',
+    tomorrowChange: 'I will work harder tomorrow',
+  });
+  const useful = checkReflectionQuality({
+    floorHit: true,
+    floorHitReason: 'Completed task 3',
+    accomplished: 'Fixed the login test',
+    blockers: 'Phone during the 7pm block',
+    planBend: 'Started at 9pm instead of 7pm',
+    tomorrowChange: 'Open the editor and write the first function',
+  });
+
+  assert.ok(vague.vagueCount >= 3);
+  assert.equal(useful.vagueCount, 0);
+});
+
+test('reflection evidence exposes only recorded plan, focus, and historical facts', () => {
+  const entry = {
+    date: '2026-10-16',
+    hasData: true,
+    plan: { items: [{ estimatedMinutes: 60, actualMinutes: 25 }] },
+    focusSessions: [{ durationMinutes: 25, interrupted: true }],
+    blockers: { raw: 'Phone during the first block' },
+  };
+  const history = [
+    { date: '2026-10-12', hasData: true, plan: { items: [{ estimatedMinutes: 60, actualMinutes: 30 }] } },
+    { date: '2026-10-13', hasData: true, plan: { items: [{ estimatedMinutes: 60, actualMinutes: 40 }] } },
+    { date: '2026-10-14', hasData: true, plan: { items: [{ estimatedMinutes: 60, actualMinutes: 20 }] } },
+  ];
+  const evidence = buildReflectionEvidence({ entry, history });
+
+  assert.ok(evidence.allowedRefs.has('today.focus_sessions'));
+  assert.ok(evidence.allowedRefs.has('history.plan_vs_actual'));
+  assert.ok(!evidence.allowedRefs.has('tomorrow.predicted_success'));
+  assert.equal(evidence.historySufficient, true);
+});
+
+test('coaching validation drops unsupported claims and keeps evidence-linked claims', () => {
+  const evidence = buildReflectionEvidence({
+    entry: { date: '2026-10-16', hasData: true, plan: { items: [{ estimatedMinutes: 60, actualMinutes: 30 }] } },
+  });
+  const result = validateReflectionCoaching({
+    observations: [
+      { text: 'Recorded focus was 30 minutes.', evidence: ['today.plan.actual_minutes'] },
+      { text: 'You were distracted by Discord for three hours.', evidence: ['invented.fact'] },
+    ],
+    interpretations: [],
+    recommendations: [],
+  }, evidence);
+
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.rejectedCount, 1);
+  assert.deepEqual(result.observations[0].evidence, ['today.plan.actual_minutes']);
+});
+
+test('prior AI recommendations are context, not evidence', () => {
+  const evidence = buildReflectionEvidence({
+    entry: { date: '2026-10-16', hasData: true },
+    history: [{
+      date: '2026-10-15',
+      hasData: true,
+      reflectionAnalysis: { recommendations: [{ action: 'Use a smaller plan tomorrow.' }] },
+    }],
+  });
+
+  assert.ok(evidence.facts.some((fact) => fact.kind === 'prior_analysis'));
+  assert.equal(evidence.allowedRefs.has('history.analysis.2026-10-15.0'), false);
+});
+
+test('mechanical coaching gives a bounded plan adjustment without an LLM', () => {
+  const entry = { date: '2026-10-16', hasData: true, plan: { items: [{ estimatedMinutes: 120, actualMinutes: 30 }] } };
+  const evidence = buildReflectionEvidence({ entry });
+  const result = buildDeterministicReflectionCoaching({
+    evidence,
+    quality: checkReflectionQuality({ accomplished: 'completed task 1' }),
+  });
+
+  assert.equal(result.recommendations.length, 1);
+  assert.match(result.recommendations[0].action, /two must-do/i);
+  assert.ok(result.recommendations[0].evidence.includes('today.plan.estimated_minutes'));
 });
 
 test('graph: produces a report with all fields', async () => {
@@ -116,7 +222,7 @@ test('graph: produces a report with all fields', async () => {
 
   assert.ok(result.report);
   assert.equal(result.report.date, '2026-10-15');
-  assert.equal(result.report.fields.length, 5);
+  assert.equal(result.report.fields.length + result.report.droppedFields.length, 5);
   assert.ok(result.report.overallScore >= 7);
 });
 
@@ -146,7 +252,48 @@ test('graph: vague answers produce follow-up questions', async () => {
 
   assert.ok(result.report);
   assert.ok(result.report.followUpQuestions.length > 0);
-  assert.ok(result.report.followUpQuestions.length <= 3);
+  assert.ok(result.report.followUpQuestions.length <= 2);
+  assert.equal(result.report.status, 'needs_clarification');
+});
+
+test('graph: malformed model fields fall back to deterministic field validation', async () => {
+  const graph = buildReflectionQualityGraph({
+    llm: {
+      structured: async () => ({
+        data: {
+          fields: [{ fieldId: 'accomplished', score: 'ten', reason: {}, suggestion: {} }],
+          summary: {},
+        },
+      }),
+    },
+  });
+  const result = await graph.invoke(
+    { date: '2026-10-15', entry: { accomplished: 'Fixed login test' } },
+    { configurable: { thread_id: 'malformed-model-thread' } }
+  );
+
+  assert.ok(result.report);
+  assert.equal(result.report.fields.length + result.report.droppedFields.length, 5);
+  assert.ok(Number.isFinite(result.report.overallScore));
+  assert.ok(result.report.fields.every((field) => Number.isInteger(field.score)));
+});
+
+test('graph: provider failure still returns deterministic coaching', async () => {
+  const graph = buildReflectionQualityGraph({
+    llm: { structured: async () => { throw new Error('provider unavailable'); } },
+  });
+  const result = await graph.invoke(
+    {
+      date: '2026-10-15',
+      entry: { date: '2026-10-15', hasData: true, plan: { items: [{ estimatedMinutes: 90, actualMinutes: 20 }] } },
+    },
+    { configurable: { thread_id: 'provider-fallback-thread' } }
+  );
+
+  assert.ok(result.report);
+  assert.equal(result.report.status, 'fallback');
+  assert.ok(result.report.recommendations.length > 0);
+  assert.ok(result.errors.length > 0);
 });
 
 test('graph: missing entry produces an error', async () => {

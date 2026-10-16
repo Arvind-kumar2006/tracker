@@ -19,7 +19,7 @@ export const WORKBOOK_TITLE = 'Study Accountability Tracker';
 /** Tab order and initial sizing for a fresh workbook. */
 const CREATE_PLAN = [
   { title: TABS.MONTHS, cols: 20, rows: 1000 },
-  { title: TABS.DAILY_LOG, cols: 25, rows: 2000 },
+  { title: TABS.DAILY_LOG, cols: TAB_SCHEMA[TABS.DAILY_LOG].headers.length, rows: 2000 },
   { title: TABS.TIME_BLOCKS, cols: 12, rows: 3000 },
   { title: TABS.BLOCKERS, cols: 10, rows: 3000 },
   { title: TABS.AI_INSIGHTS, cols: 17, rows: 2000 },
@@ -53,8 +53,16 @@ export async function ensureWorkbook(client, { title = WORKBOOK_TITLE, spreadshe
           }))
         );
 
-        const refreshed = await client.getSpreadsheet(spreadsheetId);
-        await client.batchUpdate(spreadsheetId, buildSetupRequests(refreshed, missing));
+      }
+
+      // Also refresh headers for existing tabs. This is a small schema migration for fields
+      // added after the workbook was first created (including the mobile reflection columns).
+      const refreshed = missing.length ? await client.getSpreadsheet(spreadsheetId) : existing;
+      const presentPlans = CREATE_PLAN.filter(
+        (plan) => refreshed.sheets?.some((sheet) => sheet.properties?.title === plan.title)
+      );
+      if (presentPlans.length) {
+        await client.batchUpdate(spreadsheetId, buildSetupRequests(refreshed, presentPlans));
       }
     }
     return { spreadsheetId, created: false, url: sheetUrl(spreadsheetId) };
@@ -199,6 +207,12 @@ export async function syncTab({ client, spreadsheetId, tab, docs, dryRun = false
  * `sources` supplies the already-loaded Mongo documents, so this function performs no reads.
  */
 export async function syncMonth({ client, spreadsheetId, sources, dryRun = false, now = undefined }) {
+  if (!dryRun) {
+    // Ensure existing workbooks receive current headers before rows are projected. This is
+    // idempotent and also creates any tracker tabs missing from an older connected workbook.
+    await ensureWorkbook(client, { spreadsheetId });
+  }
+
   const results = [];
   const plan = [
     [TABS.MONTHS, sources.months],

@@ -106,6 +106,20 @@ export function dailyLogRow(doc, syncedAt) {
     doc.sourceFile ?? '',
     shortId(doc.date, doc.plan?.items?.length ?? 0, doc.totalHoursComputed ?? 'x'),
     iso(stamp),
+    bool(doc.floorHit),
+    doc.floorHitReason ?? '',
+    doc.planBend ?? '',
+    JSON.stringify(doc.focusSessions ?? []),
+    p.minimumMinutes ?? '',
+    p.idealMinutes ?? '',
+    p.breakMinutes ?? '',
+    p.bufferMinutes ?? '',
+    (p.items ?? []).map((item) => {
+      const outcome = item.outcome ? ` → ${item.outcome}` : '';
+      const actual = item.actualMinutes ? ` actual ${item.actualMinutes}m` : '';
+      const state = item.status ? ` [${item.status}]` : '';
+      return `${item.n}. ${item.text} [${item.priority ?? 'MEDIUM'}] ${item.estimatedMinutes ?? '?'}m${actual}${state}${outcome}`;
+    }).join(' | '),
   ];
 }
 

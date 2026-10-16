@@ -7,7 +7,7 @@
  *   - Different prompt: 5 specific questions vs. whole-month narrative
  *
  * Shape:
- *   START -> loadEntry -> checkQuality -> validate -> render -> END
+ *   START -> loadEntry -> prepareEvidence -> checkQuality -> validate -> render -> END
  *
  * The LLM handles subjective judgment (is "studied" vague? yes). The
  * validate node is a pure function that drops fields scoring below
@@ -18,12 +18,21 @@ import { StateGraph, Annotation, START, END, MemorySaver } from '@langchain/lang
 import { checkReflectionQuality } from '../../../domain/services/ReflectionQualityChecker.js';
 import { SCHEMAS } from '../schemas.js';
 import { reflectionQualityPrompt } from '../prompts.js';
+import {
+  buildReflectionEvidence,
+  renderReflectionEvidence,
+  validateReflectionCoaching,
+  buildDeterministicReflectionCoaching,
+} from '../../../domain/services/ReflectionCoaching.js';
 
 const list = (v) => v ?? [];
+const REFLECTION_FIELD_IDS = new Set(['floorHit', 'accomplished', 'blockers', 'planBend', 'tomorrowChange']);
 
 export const ReflectionQualityState = Annotation.Root({
   date: Annotation(),
   entry: Annotation({ default: () => null }),
+  history: Annotation({ default: () => [] }),
+  evidence: Annotation({ default: () => null }),
 
   /** LLM output: per-field quality scores. */
   fieldResults: Annotation({ default: () => [] }),
@@ -31,6 +40,14 @@ export const ReflectionQualityState = Annotation.Root({
   vagueCount: Annotation({ default: () => 0 }),
   isComplete: Annotation({ default: () => true }),
   summary: Annotation({ default: () => '' }),
+  coachingRaw: Annotation({ default: () => null }),
+  coaching: Annotation({ default: () => null }),
+  analysisStatus: Annotation({ default: () => 'fallback' }),
+  aiSucceeded: Annotation({ default: () => false }),
+  model: Annotation({ default: () => null }),
+  fellBack: Annotation({ default: () => false }),
+  tokens: Annotation({ default: () => 0 }),
+  costCredits: Annotation({ default: () => 0 }),
 
   /** Pure-function validation: drops fields below threshold. */
   validatedFields: Annotation({ default: () => [] }),
@@ -53,21 +70,35 @@ function loadEntry(state) {
   return {};
 }
 
+function prepareEvidence(state) {
+  return { evidence: buildReflectionEvidence({ entry: state.entry, history: state.history }) };
+}
+
 async function checkQuality(state, { llm }) {
   try {
     const res = await llm.structured({
       task: 'reflectionQuality',
       system: 'You are a strict study reflection quality reviewer. You score daily reflections for specificity and completeness.',
-      prompt: reflectionQualityPrompt({ date: state.date, entry: state.entry }),
+      prompt: reflectionQualityPrompt({
+        date: state.date,
+        entry: state.entry,
+        evidenceText: renderReflectionEvidence(state.evidence),
+      }),
       schema: SCHEMAS.reflectionQuality,
       temperature: 0.2,
     });
     return {
-      fieldResults: res.data.fields ?? [],
-      overallScore: res.data.overallScore ?? 0,
-      vagueCount: res.data.vagueCount ?? 0,
-      isComplete: res.data.isComplete ?? false,
-      summary: res.data.summary ?? '',
+      fieldResults: Array.isArray(res.data?.fields) ? res.data.fields : [],
+      overallScore: Number.isFinite(res.data?.overallScore) ? res.data.overallScore : 0,
+      vagueCount: Number.isInteger(res.data?.vagueCount) ? res.data.vagueCount : 0,
+      isComplete: res.data?.isComplete === true,
+      summary: typeof res.data?.summary === 'string' ? res.data.summary : '',
+      coachingRaw: res.data,
+      aiSucceeded: true,
+      model: res.model ?? null,
+      fellBack: Boolean(res.fellBack),
+      tokens: res.tokens ?? 0,
+      costCredits: res.cost ?? 0,
     };
   } catch (e) {
     return { errors: [`checkQuality failed: ${e.message}`] };
@@ -81,7 +112,13 @@ async function checkQuality(state, { llm }) {
  * the mechanical result wins (it's deterministic).
  */
 function validate(state) {
-  const llmFields = list(state.fieldResults);
+  const llmFields = list(state.fieldResults).filter((field) => {
+    const score = field?.score;
+    return REFLECTION_FIELD_IDS.has(field?.fieldId)
+      && Number.isInteger(score)
+      && score >= 0
+      && score <= 10;
+  });
   const mechanical = checkReflectionQuality(state.entry);
 
   // Merge: use mechanical scores as the floor. If the LLM scored higher,
@@ -97,8 +134,10 @@ function validate(state) {
       ...mechField,
       score,
       isVague: score < 4,
-      reason: llmField.reason || mechField.reason,
-      suggestion: llmField.suggestion || mechField.suggestion,
+      reason: typeof llmField.reason === 'string' && llmField.reason.trim() ? llmField.reason : mechField.reason,
+      suggestion: typeof llmField.suggestion === 'string' && llmField.suggestion.trim()
+        ? llmField.suggestion
+        : mechField.suggestion,
     };
   });
 
@@ -110,6 +149,21 @@ function validate(state) {
     : 0;
   const vagueCount = merged.filter((f) => f.isVague).length;
   const isComplete = merged.every((f) => f.score > 0);
+  const deterministic = buildDeterministicReflectionCoaching({
+    evidence: state.evidence,
+    quality: { fields: merged, vagueCount },
+  });
+  const checkedCoaching = validateReflectionCoaching(state.coachingRaw ?? {}, state.evidence ?? {});
+  const coaching = {
+    observations: checkedCoaching.observations.length ? checkedCoaching.observations : deterministic.observations,
+    interpretations: checkedCoaching.interpretations.length ? checkedCoaching.interpretations : deterministic.interpretations,
+    mainBottleneck: checkedCoaching.mainBottleneck ?? deterministic.mainBottleneck,
+    recommendations: checkedCoaching.recommendations.length ? checkedCoaching.recommendations : deterministic.recommendations,
+    followUpMeasure: checkedCoaching.followUpMeasure ?? deterministic.followUpMeasure,
+    confidence: state.aiSucceeded ? checkedCoaching.confidence : deterministic.confidence,
+    rejectedCount: checkedCoaching.rejectedCount,
+  };
+  const followUpQuestions = buildFollowUpQuestions(merged.filter((f) => f.score >= 3), merged.filter((f) => f.score < 3));
 
   return {
     validatedFields,
@@ -117,6 +171,8 @@ function validate(state) {
     overallScore,
     vagueCount,
     isComplete,
+    coaching,
+    analysisStatus: state.aiSucceeded ? (followUpQuestions.length ? 'needs_clarification' : 'complete') : 'fallback',
   };
 }
 
@@ -144,6 +200,20 @@ function render(state) {
       suggestion: f.suggestion,
     })),
     followUpQuestions: buildFollowUpQuestions(fields, dropped),
+    status: state.analysisStatus,
+    observations: state.coaching?.observations ?? [],
+    interpretations: state.coaching?.interpretations ?? [],
+    mainBottleneck: state.coaching?.mainBottleneck ?? null,
+    recommendations: state.coaching?.recommendations ?? [],
+    followUpMeasure: state.coaching?.followUpMeasure ?? null,
+    confidence: state.coaching?.confidence ?? 'low',
+    coachingRejectedCount: state.coaching?.rejectedCount ?? 0,
+    metadata: {
+      model: state.model,
+      fellBack: state.fellBack,
+      tokens: state.tokens,
+      costCredits: Number((state.costCredits ?? 0).toFixed(6)),
+    },
   };
 
   return { report };
@@ -151,22 +221,62 @@ function render(state) {
 
 /**
  * Build minimal follow-up questions for vague or missing answers.
- * Max 3 — the goal is to prompt, not to overwhelm.
+ * Max 2 — the goal is to prompt, not to overwhelm.
  */
 function buildFollowUpQuestions(fields, dropped) {
   const followUps = [];
+  const choices = {
+    blockers: ['Phone or social media', 'Discord or messages', 'Low energy', 'Task difficulty', 'Unclear next step', 'Unexpected work'],
+    planBend: ['Started late', 'Task was too large', 'Priority changed', 'Did not know the next step', 'Unexpected work'],
+    accomplished: ['Finished a planned task', 'Built something', 'Practised a skill', 'Nothing concrete today'],
+    tomorrowChange: ['Start with a 25-minute block', 'Choose fewer priorities', 'Put the phone away', 'Define the first small step'],
+    floorHit: ['Yes — completed the minimum', 'No — below the minimum', 'Not sure yet'],
+  };
 
   for (const f of [...dropped, ...fields.filter((f) => f.isVague)]) {
-    if (followUps.length >= 3) break;
+    if (followUps.length >= 2) break;
     if (f.suggestion) {
       followUps.push({
         fieldId: f.fieldId,
         question: f.suggestion,
+        choices: choices[f.fieldId] ?? [],
       });
     }
   }
 
   return followUps;
+}
+
+/**
+ * Build a useful report without an AI provider. This keeps the quality screen available during
+ * provider outages and makes the deterministic checks useful on their own.
+ */
+export function buildMechanicalReflectionQualityReport({ date, entry, history = [], warning = null } = {}) {
+  const checked = checkReflectionQuality(entry);
+  const droppedFields = checked.fields.filter((f) => f.score < 3);
+  const fields = checked.fields.filter((f) => f.score >= 3);
+  const evidence = buildReflectionEvidence({ entry, history });
+  const coaching = buildDeterministicReflectionCoaching({ evidence, quality: checked });
+
+  return {
+    date,
+    overallScore: checked.overallScore,
+    vagueCount: checked.vagueCount,
+    isComplete: checked.isComplete,
+    summary: warning ?? 'Quality scored using deterministic checks because AI review is unavailable.',
+    fields,
+    droppedFields,
+    followUpQuestions: buildFollowUpQuestions(fields, droppedFields),
+    status: 'fallback',
+    observations: coaching.observations,
+    interpretations: coaching.interpretations,
+    mainBottleneck: coaching.mainBottleneck,
+    recommendations: coaching.recommendations,
+    followUpMeasure: coaching.followUpMeasure,
+    confidence: coaching.confidence,
+    coachingRejectedCount: 0,
+    metadata: { model: null, fellBack: true, tokens: 0, costCredits: 0 },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -178,15 +288,17 @@ export function buildReflectionQualityGraph({ llm } = {}) {
 
   const graph = new StateGraph(ReflectionQualityState)
     .addNode('loadEntry', (s) => loadEntry(s))
+    .addNode('prepareEvidence', (s) => prepareEvidence(s))
     .addNode('checkQuality', (s) => checkQuality(s, deps))
     .addNode('validate', (s) => validate(s))
     .addNode('render', (s) => render(s))
 
     .addEdge(START, 'loadEntry')
-    .addConditionalEdges('loadEntry', (s) => (!s.entry ? 'end' : 'checkQuality'), {
-      checkQuality: 'checkQuality',
+    .addConditionalEdges('loadEntry', (s) => (!s.entry ? 'end' : 'prepareEvidence'), {
+      prepareEvidence: 'prepareEvidence',
       end: END,
     })
+    .addEdge('prepareEvidence', 'checkQuality')
     .addEdge('checkQuality', 'validate')
     .addEdge('validate', 'render')
     .addEdge('render', END)

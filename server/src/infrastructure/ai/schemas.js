@@ -101,6 +101,35 @@ export const PlanCritiqueOutputSchema = z.object({
   critiques: z.array(PlanCritiqueSchema),
 });
 
+/* ---------------- planQuality ---------------- */
+
+export const PlanQualityOutputSchema = z.object({
+  realistic: z.boolean(),
+  summary: z.string(),
+  suggestions: z.array(z.object({
+    itemId: z.string(),
+    suggestion: z.string(),
+    reason: z.string(),
+  })).max(3),
+});
+
+/* ---------------- planGeneration ---------------- */
+
+export const PlanGenerationOutputSchema = z.object({
+  summary: z.string(),
+  items: z.array(z.object({
+    text: z.string().min(3).max(400),
+    outcome: z.string().min(3).max(400),
+    estimatedMinutes: z.number().int().min(5).max(240),
+    priority: z.enum(['HIGH', 'MEDIUM', 'LOW']),
+  })).min(1).max(3),
+  minimumMinutes: z.number().int().min(0).max(1440),
+  idealMinutes: z.number().int().min(0).max(1440),
+  breakMinutes: z.number().int().min(0).max(240),
+  bufferMinutes: z.number().int().min(0).max(240),
+  availableMinutes: z.number().int().min(0).max(1440),
+});
+
 /* ---------------- reflectionQuality ---------------- */
 
 export const ReflectionFieldQualitySchema = z.object({
@@ -111,12 +140,37 @@ export const ReflectionFieldQualitySchema = z.object({
   suggestion: z.string().nullable(),
 });
 
+const CoachingEvidenceRef = z.string().min(1).max(80);
+const CoachingObservationSchema = z.object({
+  text: z.string().min(1).max(320),
+  evidence: z.array(CoachingEvidenceRef).min(1).max(3),
+});
+const CoachingInterpretationSchema = z.object({
+  text: z.string().min(1).max(320),
+  evidence: z.array(CoachingEvidenceRef).min(1).max(3),
+  confidence: z.enum(['low', 'medium', 'high']),
+});
+const CoachingRecommendationSchema = z.object({
+  action: z.string().min(1).max(240),
+  why: z.string().min(1).max(240),
+  evidence: z.array(CoachingEvidenceRef).min(1).max(3),
+});
+
 export const ReflectionQualityOutputSchema = z.object({
   fields: z.array(ReflectionFieldQualitySchema),
   overallScore: z.number().int().min(0).max(10),
   vagueCount: z.number().int(),
   isComplete: z.boolean(),
   summary: z.string(),
+  observations: z.array(CoachingObservationSchema).max(4).default([]),
+  interpretations: z.array(CoachingInterpretationSchema).max(3).default([]),
+  mainBottleneck: z.object({
+    text: z.string().min(1).max(240),
+    evidence: z.array(CoachingEvidenceRef).min(1).max(3),
+  }).nullable().default(null),
+  recommendations: z.array(CoachingRecommendationSchema).max(2).default([]),
+  followUpMeasure: z.string().max(240).nullable().default(null),
+  confidence: z.enum(['low', 'medium', 'high']).default('low'),
 });
 
 export const SCHEMAS = {
@@ -124,5 +178,7 @@ export const SCHEMAS = {
   critique: CritiqueOutputSchema,
   coach: CoachOutputSchema,
   critiquePlans: PlanCritiqueOutputSchema,
+  planQuality: PlanQualityOutputSchema,
+  planGeneration: PlanGenerationOutputSchema,
   reflectionQuality: ReflectionQualityOutputSchema,
 };

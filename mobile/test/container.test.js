@@ -201,10 +201,20 @@ test('every screen is registered in the navigator', () => {
   const reflectionQuality = fs.existsSync(path.join(ROOT, 'src/interface/ReflectionQualityScreen.js'))
     ? fs.readFileSync(path.join(ROOT, 'src/interface/ReflectionQualityScreen.js'), 'utf8')
     : '';
+  const dailyPlan = fs.existsSync(path.join(ROOT, 'src/interface/DailyPlanScreen.js'))
+    ? fs.readFileSync(path.join(ROOT, 'src/interface/DailyPlanScreen.js'), 'utf8')
+    : '';
+  const focusSession = fs.existsSync(path.join(ROOT, 'src/interface/FocusSessionScreen.js'))
+    ? fs.readFileSync(path.join(ROOT, 'src/interface/FocusSessionScreen.js'), 'utf8')
+    : '';
   assert.match(reflection, /function ReflectionScreen/);
   assert.match(app, /name="Reflection"/);
   assert.match(reflectionQuality, /function ReflectionQualityScreen/);
   assert.match(app, /name="ReflectionQuality"/);
+  assert.match(dailyPlan, /function DailyPlanScreen/);
+  assert.match(app, /name="DailyPlan"/);
+  assert.match(focusSession, /function FocusSessionScreen/);
+  assert.match(app, /name="FocusSession"/);
 });
 
 /* ================================================================== *

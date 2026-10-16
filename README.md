@@ -4,7 +4,7 @@ Reads your `.xlsx` study tracker, normalises it honestly, and finds the patterns
 that a human can't see in 31 rows of free text. Google Sheets stays the human-readable mirror;
 MongoDB is the record.
 
-**Spec:** [`PRD.md`](./PRD.md) · **Status:** Phases 0–6 complete — 159 server + 66 mobile tests pass (3 server integration tests skip without MongoDB).
+**Spec:** [`PRD.md`](./PRD.md) · **Status:** Planning, reflection, focus sessions, AI fallback, and Sheets projection are implemented — 166 server + 69 mobile tests pass (3 server integration tests skip without MongoDB).
 
 ---
 
@@ -54,7 +54,7 @@ In a second terminal:
 
 ```bash
 npm run server
-curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:5555/health
 ```
 
 The health response should report `status: "ok"` and `mongo: "up"`. Set `OPENROUTER_API_KEY` in
@@ -76,25 +76,28 @@ npm install
 npm start
 ```
 
-**3. Import your folder**
+**3. Optional workbook migration**
+
+The normal mobile workflow is plan → focus session → reflection. Workbook import remains available
+for historical backfill and reconciliation; it is not required to create new daily records.
 
 ```bash
-curl "http://127.0.0.1:3000/api/import/preflight"          # parse + report, writes nothing
-curl -X POST http://127.0.0.1:3000/api/import -H 'content-type: application/json' -d '{}'
+curl "http://127.0.0.1:5555/api/import/preflight"          # parse + report, writes nothing
+curl -X POST http://127.0.0.1:5555/api/import -H 'content-type: application/json' -d '{}'
 ```
 
 **4. Read the results**
 
 ```bash
-curl http://127.0.0.1:3000/api/months/2026-10/metrics
-curl http://127.0.0.1:3000/api/months/2026-10/days?withData=true
+curl http://127.0.0.1:5555/api/months/2026-10/metrics
+curl http://127.0.0.1:5555/api/months/2026-10/days?withData=true
 ```
 
 **5. Analyse the month** (needs `OPENROUTER_API_KEY` in `server/.env`)
 
 ```bash
-curl "http://127.0.0.1:3000/api/analysis/2026-10/precheck"    # free: no LLM, no cost
-curl -X POST http://127.0.0.1:3000/api/analysis/2026-10       # runs the graph
+curl "http://127.0.0.1:5555/api/analysis/2026-10/precheck"    # free: no LLM, no cost
+curl -X POST http://127.0.0.1:5555/api/analysis/2026-10       # runs the graph
 ```
 
 ### Tests
@@ -129,9 +132,9 @@ npx expo prebuild && npx expo run:ios   # dev build: real folder picker
 
 | Where the app runs | `EXPO_PUBLIC_API_URL` | Backend must be |
 |---|---|---|
+| Deployed app / physical phone | `https://tracker-ngzd.onrender.com` | Render service running |
 | iOS simulator | `http://localhost:5555` | `HOST=127.0.0.1` (default — **no LAN exposure**) |
 | Android emulator | `http://10.0.2.2:5555` | `HOST=127.0.0.1` |
-| Physical phone | Not available with the localhost-only setup | — |
 
 **The app does not parse spreadsheets.** SheetJS needs `fs`/`Buffer` polyfills in React Native,
 and a second copy of the normaliser would inevitably drift. The app picks a folder, reads the
@@ -149,9 +152,9 @@ workbooks are on the Mac and it can read them directly. The screen says this rat
 promising folder enumeration the platform will not deliver.
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/import/upload -H 'content-type: application/json' \
+curl -X POST http://127.0.0.1:5555/api/import/upload -H 'content-type: application/json' \
   -d "{\"files\":[{\"name\":\"October_Accountability-2.xlsx\",\"base64\":\"$B64\"}]}"
-curl -X PUT http://127.0.0.1:3000/api/days/2026-10-14 -H 'content-type: application/json' \
+curl -X PUT http://127.0.0.1:5555/api/days/2026-10-14 -H 'content-type: application/json' \
   -d '{"accomplished":"...","blockers":"...","buildOutcome":"LEARNED","targetMet":"PARTIAL"}'
 ```
 
@@ -177,6 +180,33 @@ biggest gap: Declared 4 hours but delivered 1.67 hours (2026-10-06)
 
 That matches your own numbers: you declared 4 hours and logged 1.67 and 2.08. The critique does
 not fix that; it just refuses to let you keep declaring 4.
+
+### Daily mobile workflow
+
+1. **Plan today** — create up to three priorities, each with an outcome, focused-time estimate,
+   priority, minimum/ideal target, breaks, and buffer. `Review plan` flags vague or overloaded work
+   without changing it. `Generate 3-priority draft` is optional and requires the server-side
+   `OPENROUTER_API_KEY`; the draft is editable and is not saved until you press **Save daily plan**.
+2. **Focus session** — start, pause, resume, mark an interruption, and finish a session. The backend
+   records actual minutes and updates only the selected priority's actual time.
+3. **Reflect** — answer the five guided questions. Existing plans and focus totals are shown as
+   context, and the server preserves the plan, sessions, imported minutes, and provenance when the
+   reflection is saved.
+4. **Quality check** — AI suggestions are optional. **Use to edit** copies a suggestion into the
+   original reflection form; **Keep original** dismisses it. The original stored answer is never
+   overwritten by an AI response.
+
+Daily plan routes:
+
+```text
+GET  /api/days/:date                         load the day, plan, reflection, and sessions
+POST /api/days/:date/plan/generate           optional AI draft; does not persist
+POST /api/days/:date/plan/check              deterministic/AI review; does not persist
+PUT  /api/days/:date/plan                    persist the edited plan
+POST /api/days/:date/plan/carry-forward      review and move unfinished priorities to a later day
+POST /api/days/:date/focus-sessions          persist actual focused time
+PUT  /api/days/:date                         persist the reflection without erasing the plan
+```
 
 ### Hardening (Phase 6)
 
@@ -215,8 +245,13 @@ the exact strings that leaked.
 **Spend is a hard ceiling, checked before the run.** The graph makes up to 5 model calls, so
 refusing after the fact would be pointless. `BUDGET_EXCEEDED` with an explicit `force` override.
 
+OpenRouter model selection prefers the configured paid models. If those models return a
+no-credit (`402`) response, the server automatically tries `MODEL_FREE` (default:
+`openrouter/free`) and then `MODEL_FREE_FALLBACK`. Free models are rate-limited by OpenRouter,
+so adding credits and keeping the paid model settings is recommended for regular analysis.
+
 ```bash
-curl http://127.0.0.1:3000/api/diagnostics | python3 -m json.tool
+curl http://127.0.0.1:5555/api/diagnostics | python3 -m json.tool
 ```
 
 ### Google Sheets mirror
@@ -233,7 +268,7 @@ decides UPDATE-vs-APPEND:
 
 ```bash
 # see exactly what would happen, without writing anything
-curl -X POST http://127.0.0.1:3000/api/sheets/sync/2026-10 \
+curl -X POST http://127.0.0.1:5555/api/sheets/sync/2026-10 \
   -H 'content-type: application/json' -d '{"dryRun":true}'
 ```
 
@@ -331,6 +366,12 @@ Dependencies point inward. `domain/` imports nothing; adapters implement interfa
 | `POST` | `/api/sheets/connect` | Create or adopt the workbook |
 | `POST` | `/api/sheets/sync/:month` | Project a month. `{dryRun:true}` reports without writing |
 | `POST` | `/api/import/upload` | Base64 xlsx upload from the app (32 MB limit) |
+| `GET` | `/api/days/:date` | Load a day, including plan, reflection, and focus sessions |
+| `POST` | `/api/days/:date/plan/generate` | Optional AI draft of up to three priorities; does not persist |
+| `POST` | `/api/days/:date/plan/check` | Review a plan without rewriting it |
+| `PUT` | `/api/days/:date/plan` | Persist the daily plan |
+| `POST` | `/api/days/:date/plan/carry-forward` | Move unfinished priorities to a later day after review |
+| `POST` | `/api/days/:date/focus-sessions` | Persist actual focused time and interruptions |
 | `PUT` | `/api/days/:date` | Write a daily entry from the app |
 
 `asOf` is injectable on import so every metric is deterministic in tests.
@@ -344,5 +385,7 @@ There is no authentication — this is a single-user tool on your Mac (§ v1.1).
 - **No secrets in the mobile bundle.** The OpenRouter and Google keys live only in `server/.env`.
   A React Native bundle is trivially extractable, so anything shipped there is public.
 - **Backend binds `127.0.0.1` by default.** On the iOS simulator you reach it as `localhost` with
-  zero LAN exposure. Physical-device access is not enabled in this local-only setup.
+  zero LAN exposure. In `NODE_ENV=production` it binds `0.0.0.0` automatically for Render; no
+  `HOST=0.0.0.0` setting is needed in local development. A physical phone should use the deployed
+  Render URL or an explicitly secured LAN/tunnel setup, never a secret embedded in the mobile app.
 - **Journal text is never logged.** Only counts and hashes.

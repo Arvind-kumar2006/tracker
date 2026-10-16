@@ -16,6 +16,17 @@
 
 const MIN_MEANINGFUL_LENGTH = 10;
 
+/** Reflection answers are strings in mobile payloads and structured blocker objects in Mongo. */
+export function reflectionAnswerText(value) {
+  if (value && typeof value === 'object') {
+    if (value.raw !== undefined) return String(value.raw ?? '').trim();
+    if (Array.isArray(value.segments)) return value.segments.join(' ').trim();
+    if (value.text !== undefined) return String(value.text ?? '').trim();
+    return '';
+  }
+  return String(value ?? '').trim();
+}
+
 const VAGUE_ONLY_PATTERN = /^(studied|did some work|worked|read|watched|nothing|none|n\/?a|na|idk|dunno|skip|skipped|same as usual|nothing much|not much|some|a bit|little|few things|stuff|things|ok|okay|fine|alright|decent|good|nice|great|bad|meh|whatever)$/i;
 
 const CONCRETE_DETAIL_PATTERNS = [
@@ -33,7 +44,7 @@ const CONCRETE_DETAIL_PATTERNS = [
  * @returns {{fieldId: string, score: number, isVague: boolean, reason: string, suggestion: string}}
  */
 export function checkFieldQuality(fieldId, text, boolValue) {
-  const trimmed = (text ?? '').trim();
+  const trimmed = reflectionAnswerText(text);
 
   if (fieldId === 'floorHit') {
     if (boolValue === null || boolValue === undefined) {
@@ -122,7 +133,7 @@ export function checkReflectionQuality(entry) {
   const fields = [
     checkFieldQuality('floorHit', entry?.floorHitReason, entry?.floorHit),
     checkFieldQuality('accomplished', entry?.accomplished),
-    checkFieldQuality('blockers', entry?.blockers),
+    checkFieldQuality('blockers', reflectionAnswerText(entry?.blockers)),
     checkFieldQuality('planBend', entry?.planBend),
     checkFieldQuality('tomorrowChange', entry?.tomorrowChange),
   ];

@@ -53,14 +53,19 @@ const bool = (name, fallback) => {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 };
 
+const runtimeEnv = optional('NODE_ENV', 'development');
+
 // Application configuration
 export const config = {
   // Environment
-  env: optional('NODE_ENV', 'development'),
+  env: runtimeEnv,
 
   // HTTP server configuration
   http: {
     port: int('PORT', 5555),
+    // Keep local development loopback-only, but make hosted services reachable by their
+    // platform health/port scanners without requiring a HOST secret or per-platform .env file.
+    host: optional('HOST', runtimeEnv === 'production' ? '0.0.0.0' : '127.0.0.1'),
     rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
     bodyLimit: optional('BODY_LIMIT', '1mb'),
   },
@@ -122,6 +127,18 @@ export const config = {
     fallbackStrongModel: optional(
       'MODEL_STRONG_FALLBACK',
       'google/gemini-2.5-pro'
+    ),
+
+    // OpenRouter's free router is the final safety net for accounts that have not
+    // purchased credits. Paid models remain preferred when they are available.
+    freeModel: optional(
+      'MODEL_FREE',
+      'openrouter/free'
+    ),
+
+    freeFallbackModel: optional(
+      'MODEL_FREE_FALLBACK',
+      'nvidia/nemotron-3.5-super-vl:free'
     ),
 
     temperatureAnalysis: Number(

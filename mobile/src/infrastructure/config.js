@@ -1,35 +1,27 @@
 /**
  * Server addressing.
  *
- * The backend binds 127.0.0.1 by default, so the iOS simulator can reach it as `localhost`
- * with zero LAN exposure (it shares the Mac's network stack). Android's emulator needs the
- * host-loopback alias. Physical-device access is intentionally not enabled by this local setup.
+ * The deployed Render backend is the default so the mobile app works on a physical device
+ * without requiring a local server. Set EXPO_PUBLIC_API_URL to use a local backend instead.
  *
  * That trade-off is why this file is the ONLY place that knows a URL, and why the value comes
  * from EXPO_PUBLIC_API_URL rather than being hardcoded per-platform in several components.
  */
 
-import { Platform } from 'react-native';
-
 const env = (typeof process !== 'undefined' && process.env) || {};
 const { EXPO_PUBLIC_API_URL } = env;
 
-/** Host loopback alias for the Android emulator. */
-export const ANDROID_EMULATOR_HOST = '10.0.2.2';
+export const DEFAULT_API_URL = 'https://tracker-ngzd.onrender.com';
 
-export const DEFAULT_PORT = 5555;
-
-export const LAN_HINT =
-  'Physical-device access is unavailable while the backend is restricted to localhost.';
+export const LAN_HINT = 'Using the deployed Render backend.';
 
 /**
  * Resolve the API base URL.
- * Order: explicit env var -> platform-appropriate loopback default.
+ * Order: explicit env var -> deployed Render backend.
  */
 export function resolveBaseUrl() {
   if (EXPO_PUBLIC_API_URL) return EXPO_PUBLIC_API_URL.replace(/\/$/, '');
-  const host = Platform.OS === 'android' ? ANDROID_EMULATOR_HOST : 'localhost';
-  return `http://${host}:${DEFAULT_PORT}`;
+  return DEFAULT_API_URL;
 }
 
 export const BASE_URL = resolveBaseUrl();
@@ -40,6 +32,7 @@ export const isLanAddress = /^https?:\/\/(?!localhost|127\.0\.0\.1|10\.0\.2\.2)/
 export const config = {
   baseUrl: BASE_URL,
   timeoutMs: 30000,
+  saveTimeoutMs: 120000, // saving also mirrors the entry to Google Sheets
   analysisTimeoutMs: 120000, // the graph runs up to 5 model calls
   uploadTimeoutMs: 120000,
 };
@@ -59,6 +52,11 @@ export const endpoints = {
   analyse: (m) => `/api/analysis/${m}`,
   insights: (m) => `/api/analysis/${m}/insights`,
   day: (d) => `/api/days/${d}`,
+  plan: (d) => `/api/days/${d}/plan`,
+  planCarryForward: (d) => `/api/days/${d}/plan/carry-forward`,
+  planGenerate: (d) => `/api/days/${d}/plan/generate`,
+  planCheck: (d) => `/api/days/${d}/plan/check`,
+  focusSessions: (d) => `/api/days/${d}/focus-sessions`,
   insightStatus: (id) => `/api/insights/${id}/status`,
   planCritiques: '/api/plan-critiques',
   quarantine: '/api/quarantine',

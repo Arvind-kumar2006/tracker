@@ -79,6 +79,11 @@ test('entryToForm converts API entry to form state', () => {
   assert.equal(form.tomorrowChange, 'Start early');
 });
 
+test('entryToForm unwraps Mongo blocker objects', () => {
+  const form = entryToForm({ blockers: { raw: 'Phone notifications interrupted the first block' } });
+  assert.equal(form.blockers, 'Phone notifications interrupted the first block');
+});
+
 test('entryToForm handles missing entry', () => {
   const form = entryToForm(null);
   assert.equal(form.floorHit, null);

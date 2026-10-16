@@ -18,6 +18,8 @@ import {
 } from '../../infrastructure/persistence/mongo/repositories.js';
 import { connect, close, ping, getDb } from '../../infrastructure/persistence/mongo/connection.js';
 import { importWorkbooks } from '../../application/useCases/importWorkbooks.js';
+import { syncToSheets } from '../../application/useCases/syncToSheets.js';
+import { createSheetsClient } from '../../infrastructure/sheets/googleSheetsClient.js';
 
 let ready = false;
 
@@ -61,6 +63,29 @@ export const container = {
       recursive: params.recursive ?? config.ingest.recursive,
       force: params.force ?? false,
       asOf: params.asOf,
+    });
+  },
+
+  /** Best-effort projection used after a mobile daily-entry save. */
+  async syncMonthToSheets(month) {
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      return {
+        ok: false,
+        error: new Error('Google Sheets is not configured on the server.'),
+      };
+    }
+
+    await bootstrap();
+    return syncToSheets({
+      sheetsClient: createSheetsClient({ json: config.sheets.serviceAccountJson }),
+      settingsRepository: SettingsRepository,
+      dailyLogRepository: DailyLogRepository,
+      monthRepository: MonthRepository,
+      insightRepository: InsightRepository,
+      planCritiqueRepository: PlanCritiqueRepository,
+      importLogRepository: ImportLogRepository,
+      spreadsheetId: config.sheets.spreadsheetId,
+      month,
     });
   },
 };

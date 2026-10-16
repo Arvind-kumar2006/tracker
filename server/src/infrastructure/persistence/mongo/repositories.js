@@ -30,6 +30,8 @@ export const DailyLogRepository = {
             hasData: e.hasData,
             hasMinutes: e.hasMinutes,
             plan: e.plan,
+            focusSessions: e.focusSessions ?? [],
+            ...(e.reflectionAnalysis !== undefined ? { reflectionAnalysis: e.reflectionAnalysis } : {}),
             minutes: e.minutes,
             totalHoursComputed: e.totalHoursComputed,
             totalHoursReported: e.totalHoursReported,
@@ -41,6 +43,11 @@ export const DailyLogRepository = {
             buildNote: e.buildNote,
             blockers: e.blockers,
             tomorrowChange: e.tomorrowChange,
+            // Phase 7 reflection fields. Keep these explicit so mobile answers survive the
+            // repository projection instead of being silently dropped before Mongo writes.
+            floorHit: e.floorHit,
+            floorHitReason: e.floorHitReason,
+            planBend: e.planBend,
             timeBlocks: e.timeBlocks,
             sourceFile: fileName ?? e.sourceFile,
             // 'import' vs 'app' — an entry typed in the phone must stay distinguishable from a
@@ -80,6 +87,14 @@ export const DailyLogRepository = {
 
   async count() {
     return getDb().collection('daily_logs').countDocuments();
+  },
+
+  /** Replace the latest per-day AI report without touching the user's reflection or plan. */
+  async updateReflectionAnalysis(date, analysis) {
+    await getDb().collection('daily_logs').updateOne(
+      { _id: date },
+      { $set: { reflectionAnalysis: analysis, updatedAt: new Date() } }
+    );
   },
 };
 

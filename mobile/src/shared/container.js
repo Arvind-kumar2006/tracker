@@ -22,6 +22,12 @@ export const container = {
   loadInsights: (opts) => loadInsights({ api, ...opts }),
   updateInsightStatus: (opts) => updateInsightStatus({ api, ...opts }),
   loadPlanCritiques: () => api.getPlanCritiques(),
+  loadDay: (date) => api.getDay(date),
+  saveDailyPlan: (date, plan) => api.saveDailyPlan(date, plan),
+  carryForwardPlan: (date, targetDate) => api.carryForwardPlan(date, targetDate),
+  generateDailyPlan: (date, input) => api.generateDailyPlan(date, input),
+  checkDailyPlan: (date, plan) => api.checkDailyPlan(date, plan),
+  saveFocusSession: (date, session) => api.saveFocusSession(date, session),
 
   /**
    * Saving a daily entry.

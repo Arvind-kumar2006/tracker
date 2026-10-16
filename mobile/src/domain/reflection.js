@@ -9,7 +9,7 @@ export const REFLECTION_QUESTIONS = [
   {
     id: 'floorHit',
     shortLabel: 'Did',
-    question: 'Did I hit my floor today?',
+    question: 'What did I plan, and what did I actually complete?',
     description: "Floor hit means the day counts, even if the target wasn't reached.",
     type: 'boolean-reason',
     fields: ['floorHit', 'floorHitReason'],
@@ -19,7 +19,7 @@ export const REFLECTION_QUESTIONS = [
   {
     id: 'accomplished',
     shortLabel: 'Win',
-    question: 'What did I build or finish, even something small?',
+    question: 'What went well today, even something small?',
     description: '"Nothing" is an acceptable answer, and it\'s still useful, because it tells you whether you built or only watched.',
     type: 'text',
     fields: ['accomplished'],
@@ -29,7 +29,7 @@ export const REFLECTION_QUESTIONS = [
   {
     id: 'blockers',
     shortLabel: 'Avoids',
-    question: 'What did I avoid today, and what did I do instead?',
+    question: 'What distracted me or made work difficult?',
     description: 'It\'s a fact you can act on, not a regret to feel bad about.',
     type: 'text',
     fields: ['blockers'],
@@ -39,7 +39,7 @@ export const REFLECTION_QUESTIONS = [
   {
     id: 'planBend',
     shortLabel: 'Roadblock',
-    question: 'Where did the plan first bend, and did I notice it then or only later?',
+    question: 'Why did I delay, avoid, or abandon a task?',
     description: 'Over the weeks, the goal is to catch the bend earlier.',
     type: 'text',
     fields: ['planBend'],
@@ -90,11 +90,14 @@ export function formToPayload(form) {
  * Convert API entry to form state (for editing).
  */
 export function entryToForm(entry) {
+  const blockers = entry?.blockers && typeof entry.blockers === 'object'
+    ? entry.blockers.raw ?? entry.blockers.segments?.join('\n') ?? ''
+    : entry?.blockers ?? '';
   return {
     floorHit: entry?.floorHit ?? null,
     floorHitReason: entry?.floorHitReason ?? '',
     accomplished: entry?.accomplished ?? '',
-    blockers: entry?.blockers ?? '',
+    blockers,
     planBend: entry?.planBend ?? '',
     tomorrowChange: entry?.tomorrowChange ?? '',
   };
@@ -121,6 +124,15 @@ export function buildQualityViewModel(report) {
     })),
     droppedFields: report.droppedFields ?? [],
     followUpQuestions: report.followUpQuestions ?? [],
+    status: report.status ?? (report.qualitySource === 'mechanical' ? 'fallback' : 'complete'),
+    qualitySource: report.qualitySource ?? 'unknown',
+    observations: report.observations ?? [],
+    interpretations: report.interpretations ?? [],
+    mainBottleneck: report.mainBottleneck ?? null,
+    recommendations: report.recommendations ?? [],
+    followUpMeasure: report.followUpMeasure ?? null,
+    confidence: report.confidence ?? 'low',
+    metadata: report.metadata ?? {},
   };
 }
 

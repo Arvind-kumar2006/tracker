@@ -8,7 +8,7 @@
  *
  * Two resilience behaviours, both required by the PRD:
  *   - model fallback: if the primary model errors (provider 5xx, rate limit, moderation), retry
- *     once with a configured secondary model and record `fellBack`;
+ *     with a configured secondary model and finally a free-model safety net, recording `fellBack`;
  *   - retry with jittered backoff on 429/5xx before falling back.
  */
 
@@ -25,12 +25,15 @@ const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jitter = (base) => base + Math.floor(Math.random() * 250);
 
-/** Model per task, with its configured fallback. */
+/** Model per task, with paid fallbacks followed by a no-credit safety net. */
 const MODEL_MAP = {
   detectPatterns: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
   critique: { primary: () => config.ai.strongModel, fallback: () => config.ai.fallbackStrongModel },
   coach: { primary: () => config.ai.strongModel, fallback: () => config.ai.fallbackStrongModel },
   critiquePlans: { primary: () => config.ai.strongModel, fallback: () => config.ai.fallbackStrongModel },
+  planQuality: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
+  planGeneration: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
+  reflectionQuality: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
 };
 
 export function createOpenRouterAdapter({ apiKey } = {}) {
@@ -100,7 +103,11 @@ export function createOpenRouterAdapter({ apiKey } = {}) {
     const candidates = [
       { model: models.primary(), fellBack: false },
       { model: models.fallback(), fellBack: true },
-    ];
+      { model: config.ai.freeModel, fellBack: true },
+      { model: config.ai.freeFallbackModel, fellBack: true },
+    ].filter((candidate, index, all) => (
+      candidate.model && all.findIndex((other) => other.model === candidate.model) === index
+    ));
 
     let lastError = null;
 
