@@ -101,7 +101,24 @@ function buildSetupRequests(spreadsheet, plans) {
   for (const plan of plans) {
     const schema = TAB_SCHEMA[plan.title];
     const sheetId = sheetIdFor(spreadsheet, plan.title);
-    if (sheetId === 0 && !spreadsheet.sheets?.some((s) => s.properties?.title === plan.title)) continue;
+    const sheet = (spreadsheet.sheets ?? []).find((s) => s.properties?.title === plan.title);
+    if (sheetId === 0 && !sheet) continue;
+
+    // Existing workbooks can have been created with an older schema. Google rejects an
+    // updateCells request when the header is wider than the tab's current grid, so resize the
+    // grid before writing the current header. Never shrink a user's existing sheet.
+    const grid = sheet?.properties?.gridProperties ?? {};
+    const rowCount = Math.max(Number(grid.rowCount) || 0, plan.rows);
+    const columnCount = Math.max(Number(grid.columnCount) || 0, schema.headers.length);
+
+    // Resize the grid and freeze the header before writing it. The order matters for old
+    // workbooks whose grid is narrower than the current schema.
+    requests.push({
+      updateSheetProperties: {
+        properties: { sheetId, gridProperties: { frozenRowCount: 1, rowCount, columnCount } },
+        fields: 'gridProperties.frozenRowCount,gridProperties.rowCount,gridProperties.columnCount',
+      },
+    });
 
     // Header row.
     requests.push({
@@ -109,14 +126,6 @@ function buildSetupRequests(spreadsheet, plans) {
         range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
         rows: [{ values: schema.headers.map((h) => ({ userEnteredValue: { stringValue: h } })) }],
         fields: 'userEnteredValue',
-      },
-    });
-
-    // Freeze the header so scrolling a month of rows stays readable.
-    requests.push({
-      updateSheetProperties: {
-        properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
-        fields: 'gridProperties.frozenRowCount',
       },
     });
 

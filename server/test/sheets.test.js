@@ -386,6 +386,36 @@ test('ensureWorkbook reuses an existing id without recreating', async () => {
   assert.equal(getCalled, 1);
 });
 
+test('ensureWorkbook expands older tabs before refreshing wider headers', async () => {
+  let requests = [];
+  const sheets = Object.values(TABS).map((title, sheetId) => ({
+    properties: {
+      title,
+      sheetId,
+      gridProperties: { rowCount: 100, columnCount: 24 },
+    },
+  }));
+  const client = {
+    async getSpreadsheet() { return { spreadsheetId: 'existing-id', sheets }; },
+    async batchUpdate(_id, nextRequests) { requests = nextRequests; },
+  };
+
+  await ensureWorkbook(client, { spreadsheetId: 'existing-id' });
+
+  const resizeIndex = requests.findIndex((request) => (
+    request.updateSheetProperties?.properties?.sheetId === 1
+  ));
+  const headerIndex = requests.findIndex((request) => (
+    request.updateCells?.range?.sheetId === 1
+  ));
+  assert.ok(resizeIndex >= 0);
+  assert.ok(headerIndex > resizeIndex, 'the grid must be expanded before the header is written');
+  assert.equal(
+    requests[resizeIndex].updateSheetProperties.properties.gridProperties.columnCount,
+    TAB_SCHEMA[TABS.DAILY_LOG].headers.length
+  );
+});
+
 /* ================================================================== *
  * 5. Credential parsing
  * ================================================================== */
