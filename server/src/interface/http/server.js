@@ -507,14 +507,17 @@ export function createApp({ expressFactory = express } = {}) {
 
 export async function start() {
   const app = createApp();
-  const server = app.listen(config.http.port, config.http.host, async () => {
+  const server = app.listen(config.http.port, async () => {
     let mongo = 'down';
     try {
       await bootstrap();
       mongo = (await container.mongo.ping()) ? 'up' : 'down';
-    } catch (e) {
-    console.log(`  listening   http://${config.http.host}:${config.http.port}`);
-  }});
+    } catch {
+      mongo = 'down';
+    }
+    console.log(`  listening   http://localhost:${config.http.port}`);
+    console.log(`  mongo       ${mongo}`);
+  });
 
 
   const bye = async () => {

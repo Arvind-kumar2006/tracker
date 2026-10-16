@@ -63,9 +63,6 @@ export const config = {
   // HTTP server configuration
   http: {
     port: int('PORT', 5555),
-    // Keep local development loopback-only, but make hosted services reachable by their
-    // platform health/port scanners without requiring a HOST secret or per-platform .env file.
-    host: optional('HOST', runtimeEnv === 'production' ? '0.0.0.0' : '127.0.0.1'),
     rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
     bodyLimit: optional('BODY_LIMIT', '1mb'),
   },

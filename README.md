@@ -133,8 +133,8 @@ npx expo prebuild && npx expo run:ios   # dev build: real folder picker
 | Where the app runs | `EXPO_PUBLIC_API_URL` | Backend must be |
 |---|---|---|
 | Deployed app / physical phone | `https://tracker-ngzd.onrender.com` | Render service running |
-| iOS simulator | `http://localhost:5555` | `HOST=127.0.0.1` (default — **no LAN exposure**) |
-| Android emulator | `http://10.0.2.2:5555` | `HOST=127.0.0.1` |
+| iOS simulator | `http://localhost:5555` | local backend |
+| Android emulator | `http://10.0.2.2:5555` | local backend |
 
 **The app does not parse spreadsheets.** SheetJS needs `fs`/`Buffer` polyfills in React Native,
 and a second copy of the normaliser would inevitably drift. The app picks a folder, reads the
@@ -384,8 +384,8 @@ There is no authentication — this is a single-user tool on your Mac (§ v1.1).
 
 - **No secrets in the mobile bundle.** The OpenRouter and Google keys live only in `server/.env`.
   A React Native bundle is trivially extractable, so anything shipped there is public.
-- **Backend binds `127.0.0.1` by default.** On the iOS simulator you reach it as `localhost` with
-  zero LAN exposure. In `NODE_ENV=production` it binds `0.0.0.0` automatically for Render; no
-  `HOST=0.0.0.0` setting is needed in local development. A physical phone should use the deployed
+- **Backend is available locally at `http://localhost:5555`.** The server leaves interface
+  selection to Node and the hosting platform, so Render can detect its assigned port without an
+  interface setting. A physical phone should use the deployed
   Render URL or an explicitly secured LAN/tunnel setup, never a secret embedded in the mobile app.
 - **Journal text is never logged.** Only counts and hashes.
