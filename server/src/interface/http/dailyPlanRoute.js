@@ -7,6 +7,7 @@ import { calculateMetrics } from '../../domain/services/MetricsCalculator.js';
 import { container, bootstrap } from '../../shared/di/container.js';
 import { SCHEMAS } from '../../infrastructure/ai/schemas.js';
 import { planGenerationPrompt, planQualityPrompt } from '../../infrastructure/ai/prompts.js';
+import { logger } from '../../shared/logger.js';
 
 function syncResult(mirror) {
   return mirror?.ok
@@ -15,6 +16,59 @@ function syncResult(mirror) {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const log = logger.child('daily-plan');
+
+function minutesOr(value, fallback = 0) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1440, Math.round(number))) : fallback;
+}
+
+/**
+ * Keep plan drafting usable during an OpenRouter outage. This is deliberately transparent:
+ * it creates one editable priority from the user's own goal and never claims that AI wrote it.
+ */
+export function buildFallbackDailyPlan({ date, goal, availableMinutes, minimumMinutes, idealMinutes }) {
+  const available = minutesOr(availableMinutes);
+  const ideal = minutesOr(idealMinutes);
+  const minimum = minutesOr(minimumMinutes);
+  const focusMinutes = available > 0
+    ? Math.max(5, Math.min(available, ideal || available, 60))
+    : Math.max(5, Math.min(ideal || 60, 60));
+  const breakMinutes = focusMinutes >= 60 && (available === 0 || available >= focusMinutes + 5) ? 5 : 0;
+  const input = {
+    summary: `Starter draft for: ${goal}`,
+    items: [{
+      text: goal,
+      outcome: `Complete one concrete step toward: ${goal}`,
+      estimatedMinutes: focusMinutes,
+      priority: 'HIGH',
+    }],
+    minimumMinutes: minimum || Math.min(30, focusMinutes),
+    idealMinutes: ideal || focusMinutes,
+    breakMinutes,
+    bufferMinutes: 0,
+    availableMinutes: available,
+  };
+  return buildDailyPlan({ date, input });
+}
+
+function fallbackDraftResponse({ date, goal, body, reason }) {
+  const plan = buildFallbackDailyPlan({
+    date,
+    goal,
+    availableMinutes: body?.availableMinutes,
+    minimumMinutes: body?.minimumMinutes,
+    idealMinutes: body?.idealMinutes,
+  });
+  return {
+    plan,
+    review: reviewDailyPlan(plan),
+    summary: reason,
+    qualitySource: 'fallback',
+    warning: 'AI drafting was unavailable. This starter plan was created from your goal and is ready to edit.',
+  };
+}
 
 export function unfinishedPlanItems(plan = {}) {
   return (plan.items ?? []).filter((item) => (
@@ -152,12 +206,12 @@ export function dailyPlanRouter() {
       });
     }
     if (!process.env.OPENROUTER_API_KEY) {
-      return res.status(503).json({
-        error: {
-          code: ErrorCode.NO_PROVIDER,
-          message: 'AI plan drafting is unavailable. You can still create the plan manually.',
-        },
-      });
+      return res.json(fallbackDraftResponse({
+        date: req.params.date,
+        goal,
+        body: req.body,
+        reason: 'AI is not configured, so this editable starter plan was created from your goal.',
+      }));
     }
 
     try {
@@ -183,13 +237,19 @@ export function dailyPlanRouter() {
         summary: data.summary,
         qualitySource: 'ai',
       });
-    } catch {
-      return res.status(502).json({
-        error: {
-          code: ErrorCode.UPSTREAM_ERROR,
-          message: 'AI plan drafting failed. Create the plan manually and try again later.',
-        },
+    } catch (error) {
+      log.warn('AI plan drafting failed; returning editable fallback', {
+        task: 'planGeneration',
+        errorName: error?.name ?? 'Error',
+        errorCode: error?.code ?? null,
+        status: error?.status ?? error?.statusCode ?? error?.response?.status ?? null,
       });
+      return res.json(fallbackDraftResponse({
+        date: req.params.date,
+        goal,
+        body: req.body,
+        reason: 'AI was temporarily unavailable, so this editable starter plan was created from your goal.',
+      }));
     }
   });
 

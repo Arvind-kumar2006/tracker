@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDailyPlan, reviewDailyPlan } from '../src/domain/services/DailyPlan.js';
-import { unfinishedPlanItems } from '../src/interface/http/dailyPlanRoute.js';
+import { buildFallbackDailyPlan, unfinishedPlanItems } from '../src/interface/http/dailyPlanRoute.js';
 import { saveFocusSession } from '../src/interface/http/focusSessionRoute.js';
 
 test('buildDailyPlan creates a backward-compatible canonical plan', () => {
@@ -27,6 +27,22 @@ test('buildDailyPlan rejects more than three priorities', () => {
     () => buildDailyPlan({ date: '2026-10-16', input: { items: [{ text: 'a' }, { text: 'b' }, { text: 'c' }, { text: 'd' }] } }),
     (error) => error.code === 'IMPOSSIBLE_RANGE'
   );
+});
+
+test('buildFallbackDailyPlan creates a transparent editable starter plan', () => {
+  const plan = buildFallbackDailyPlan({
+    date: '2026-10-16',
+    goal: 'prepare for a backend interview',
+    availableMinutes: 45,
+    minimumMinutes: 30,
+    idealMinutes: 120,
+  });
+
+  assert.equal(plan.items.length, 1);
+  assert.equal(plan.items[0].text, 'prepare for a backend interview');
+  assert.equal(plan.items[0].estimatedMinutes, 45);
+  assert.match(plan.items[0].outcome, /prepare for a backend interview/);
+  assert.equal(plan.availableMinutes, 45);
 });
 
 test('reviewDailyPlan flags vague tasks and an overloaded schedule', () => {

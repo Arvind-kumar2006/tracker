@@ -10,7 +10,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable } from 'react-native'
 import { container } from '../shared/container.js';
 import {
   buildDashboardView, monthForDate, formatDate, formatHours, formatPercent,
-  formatMinutes,
+  formatMinutes, sortBySeverity,
 } from '../domain/index.js';
 import { colors, typography, styles, spacing, radius } from './theme.js';
 import { Button, StatCard, MonthGrid, CategoryBar, InsightCard, EmptyState, Banner, Chip, TaskCard, ProgressBar, SectionHeader, LoadingState, StatusPill } from './components.js';
