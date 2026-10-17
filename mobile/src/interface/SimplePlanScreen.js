@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { container } from '../shared/container.js';
 import { formatDate } from '../domain/index.js';
 import { MAX_DAILY_PRIORITIES, emptyDailyPlan, planToForm, planToPayload } from '../domain/dailyPlan.js';
@@ -121,7 +122,8 @@ export function SimplePlanScreen({ route, navigation }) {
   if (loading) return <LoadingState label="Loading your plan…" />;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.rowBetween}>
         <View style={{ flex: 1, paddingRight: spacing.sm }}>
           <Text style={typography.h1}>Plan</Text>
@@ -194,6 +196,7 @@ export function SimplePlanScreen({ route, navigation }) {
       </View>
 
       <Button label="Save plan" onPress={save} loading={saving} disabled={saving} style={{ marginTop: spacing.md }} />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

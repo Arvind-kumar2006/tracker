@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { container } from '../shared/container.js';
 import { REFLECTION_QUESTIONS, emptyReflectionForm, entryToForm, formToPayload } from '../domain/reflection.js';
 import { formatDate } from '../domain/index.js';
@@ -89,8 +90,9 @@ export function SimpleReflectionScreen({ route, navigation }) {
   if (loadError) return <EmptyState title="Reflection unavailable" message={loadError} action="Retry" onAction={load} />;
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.rowBetween}>
           <View style={{ flex: 1, paddingRight: spacing.sm }}>
             <Text style={typography.h1}>Reflect</Text>
@@ -169,7 +171,8 @@ export function SimpleReflectionScreen({ route, navigation }) {
             {syncWarning ? <Banner tone="warning">{syncWarning}</Banner> : null}
           </View>
         ) : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
