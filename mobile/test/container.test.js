@@ -180,41 +180,27 @@ test('endpoints used by the client are all defined in config', () => {
  * 4. Screens are registered
  * ================================================================== */
 
-test('every screen is registered in the navigator', () => {
+test('the navigator exposes only the two daily screens', () => {
   const app = fs.readFileSync(path.join(ROOT, 'App.js'), 'utf8');
-  const screens = fs.readFileSync(path.join(ROOT, 'src/interface/screens.js'), 'utf8');
-  const plan = fs.existsSync(path.join(ROOT, 'src/interface/PlanCritiqueScreen.js'))
-    ? fs.readFileSync(path.join(ROOT, 'src/interface/PlanCritiqueScreen.js'), 'utf8')
-    : '';
+  const plan = fs.readFileSync(path.join(ROOT, 'src/interface/SimplePlanScreen.js'), 'utf8');
+  const reflection = fs.readFileSync(path.join(ROOT, 'src/interface/SimpleReflectionScreen.js'), 'utf8');
 
-  for (const name of ['DashboardScreen', 'ImportScreen', 'InsightsScreen', 'SettingsScreen']) {
-    assert.match(screens, new RegExp(`function ${name}`), `${name} is not defined`);
-    assert.match(app, new RegExp(`name="${name.replace('Screen', '')}"`), `${name} is not routed`);
-  }
-  assert.match(plan, /function PlanCritiqueScreen/);
-  assert.match(app, /name="PlanCritique"/);
-
-  // Phase 7: reflection screens
-  const reflection = fs.existsSync(path.join(ROOT, 'src/interface/ReflectionScreen.js'))
-    ? fs.readFileSync(path.join(ROOT, 'src/interface/ReflectionScreen.js'), 'utf8')
-    : '';
-  const reflectionQuality = fs.existsSync(path.join(ROOT, 'src/interface/ReflectionQualityScreen.js'))
-    ? fs.readFileSync(path.join(ROOT, 'src/interface/ReflectionQualityScreen.js'), 'utf8')
-    : '';
-  const dailyPlan = fs.existsSync(path.join(ROOT, 'src/interface/DailyPlanScreen.js'))
-    ? fs.readFileSync(path.join(ROOT, 'src/interface/DailyPlanScreen.js'), 'utf8')
-    : '';
-  const focusSession = fs.existsSync(path.join(ROOT, 'src/interface/FocusSessionScreen.js'))
-    ? fs.readFileSync(path.join(ROOT, 'src/interface/FocusSessionScreen.js'), 'utf8')
-    : '';
-  assert.match(reflection, /function ReflectionScreen/);
-  assert.match(app, /name="Reflection"/);
-  assert.match(reflectionQuality, /function ReflectionQualityScreen/);
-  assert.match(app, /name="ReflectionQuality"/);
-  assert.match(dailyPlan, /function DailyPlanScreen/);
+  assert.match(plan, /function SimplePlanScreen/);
+  assert.match(reflection, /function SimpleReflectionScreen/);
   assert.match(app, /name="DailyPlan"/);
-  assert.match(focusSession, /function FocusSessionScreen/);
-  assert.match(app, /name="FocusSession"/);
+  assert.match(app, /name="Reflection"/);
+  assert.match(app, /component=\{SimplePlanScreen\}/);
+  assert.match(app, /component=\{SimpleReflectionScreen\}/);
+
+  for (const removedRoute of ['Dashboard', 'Focus', 'Insights', 'Import', 'Settings', 'PlanCritique', 'ReflectionQuality', 'FocusSession']) {
+    assert.doesNotMatch(app, new RegExp(`name="${removedRoute}"`), `${removedRoute} should not be a daily screen`);
+  }
+});
+
+test('progress accessibility values are integer percentages for native bridges', () => {
+  const components = fs.readFileSync(path.join(ROOT, 'src/interface/components.js'), 'utf8');
+  assert.match(components, /const accessiblePercentage = Math\.round\(percentage \* 100\)/);
+  assert.match(components, /accessibilityValue=\{\{ min: 0, max: 100, now: accessiblePercentage \}\}/);
 });
 
 /* ================================================================== *

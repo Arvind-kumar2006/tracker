@@ -78,7 +78,7 @@ npm start
 
 **3. Optional workbook migration**
 
-The normal mobile workflow is plan → focus session → reflection. Workbook import remains available
+The normal mobile workflow is plan → reflection. Workbook import remains available
 for historical backfill and reconciliation; it is not required to create new daily records.
 
 ```bash
@@ -183,28 +183,21 @@ not fix that; it just refuses to let you keep declaring 4.
 
 ### Daily mobile workflow
 
-1. **Plan today** — create up to three priorities, each with an outcome, focused-time estimate,
-   priority, minimum/ideal target, breaks, and buffer. `Review plan` flags vague or overloaded work
-   without changing it. `Generate 3-priority draft` is optional and requires the server-side
-   `OPENROUTER_API_KEY`; the draft is editable and is not saved until you press **Save daily plan**.
-2. **Focus session** — start, pause, resume, mark an interruption, and finish a session. The backend
-   records actual minutes and updates only the selected priority's actual time.
-3. **Reflect** — answer the five guided questions. Existing plans and focus totals are shown as
-   context, and the server preserves the plan, sessions, imported minutes, and provenance when the
-   reflection is saved.
-4. **Quality check** — AI suggestions are optional. **Use to edit** copies a suggestion into the
-   original reflection form; **Keep original** dismisses it. The original stored answer is never
-   overwritten by an AI response.
+1. **Plan** — write one must-do and up to two optional things, with a rough minute estimate. Save it
+   in the morning or the night before. The app keeps this screen intentionally small so the plan is
+   easy to repeat every day.
+2. **Reflect** — spend five minutes on five short prompts: **Did**, **Win**, **Avoids**,
+   **Roadblock**, and **One thing**. Short answers are valid, including “nothing” for Win. Saving
+   the reflection keeps the existing plan and syncs the daily record to the configured mirror.
+
+The old focus timer, AI drafting, plan critique, insights, import, and settings screens remain in the
+codebase for compatibility and historical work, but they are no longer part of the daily navigation.
 
 Daily plan routes:
 
 ```text
 GET  /api/days/:date                         load the day, plan, reflection, and sessions
-POST /api/days/:date/plan/generate           optional AI draft; does not persist
-POST /api/days/:date/plan/check              deterministic/AI review; does not persist
 PUT  /api/days/:date/plan                    persist the edited plan
-POST /api/days/:date/plan/carry-forward      review and move unfinished priorities to a later day
-POST /api/days/:date/focus-sessions          persist actual focused time
 PUT  /api/days/:date                         persist the reflection without erasing the plan
 ```
 

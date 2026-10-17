@@ -50,8 +50,12 @@ export const SectionHeader = ({ title, action, onAction }) => (
 export const ProgressBar = ({ value = 0, tone = 'primary', label, detail }) => {
   const fillColor = tone === 'positive' ? colors.positive : tone === 'warning' ? colors.warning : colors.primarySoft;
   const percentage = Math.max(0, Math.min(1, Number(value) || 0));
+  // Native accessibility progress values are integer-backed on Android. Keep the visual
+  // fraction precise, but expose a rounded 0-100 percentage to avoid a precision-conversion
+  // exception for tiny timer values such as 1 / 3000.
+  const accessiblePercentage = Math.round(percentage * 100);
   return (
-    <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 1, now: percentage }}>
+    <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: accessiblePercentage }}>
       {label || detail ? (
         <View style={[styles.rowBetween, { marginBottom: spacing.xs }]}>
           {label ? <Text style={typography.small}>{label}</Text> : <View />}

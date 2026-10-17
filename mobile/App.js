@@ -6,12 +6,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { DashboardScreen, FocusHomeScreen, ImportScreen, InsightsScreen, SettingsScreen } from './src/interface/screens.js';
-import { PlanCritiqueScreen } from './src/interface/PlanCritiqueScreen.js';
-import { ReflectionScreen } from './src/interface/ReflectionScreen.js';
-import { ReflectionQualityScreen } from './src/interface/ReflectionQualityScreen.js';
-import { DailyPlanScreen } from './src/interface/DailyPlanScreen.js';
-import { FocusSessionScreen } from './src/interface/FocusSessionScreen.js';
+import { SimpleReflectionScreen } from './src/interface/SimpleReflectionScreen.js';
+import { SimplePlanScreen } from './src/interface/SimplePlanScreen.js';
 import { colors, styles } from './src/interface/theme.js';
 
 const Stack = createNativeStackNavigator();
@@ -41,11 +37,6 @@ export default function App() {
           screenOptions={{ headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
         >
           <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-          <Stack.Screen name="FocusSession" component={FocusSessionScreen} options={{ title: 'Focus session' }} />
-          <Stack.Screen name="Import" component={ImportScreen} options={{ title: 'Import workbooks' }} />
-          <Stack.Screen name="ReflectionQuality" component={ReflectionQualityScreen} options={{ title: 'Quality check' }} />
-          <Stack.Screen name="PlanCritique" component={PlanCritiqueScreen} options={{ title: 'Plan quality' }} />
-          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
@@ -53,17 +44,14 @@ export default function App() {
 }
 
 const TAB_META = {
-  Dashboard: { label: 'Home', icon: '⌂' },
   DailyPlan: { label: 'Plan', icon: '☷' },
-  Focus: { label: 'Focus', icon: '◷' },
   Reflection: { label: 'Reflect', icon: '✎' },
-  Insights: { label: 'Insights', icon: '◉' },
 };
 
 function MainTabs() {
   return (
     <Tabs.Navigator
-      initialRouteName="Dashboard"
+      initialRouteName="DailyPlan"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarHideOnKeyboard: true,
@@ -76,11 +64,8 @@ function MainTabs() {
         ),
       })}
     >
-      <Tabs.Screen name="Dashboard" component={DashboardScreen} options={{ tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="DailyPlan" component={DailyPlanScreen} options={{ tabBarLabel: 'Plan' }} />
-      <Tabs.Screen name="Focus" component={FocusHomeScreen} options={{ tabBarLabel: 'Focus' }} />
-      <Tabs.Screen name="Reflection" component={ReflectionScreen} options={{ tabBarLabel: 'Reflect' }} />
-      <Tabs.Screen name="Insights" component={InsightsScreen} options={{ tabBarLabel: 'Insights' }} />
+      <Tabs.Screen name="DailyPlan" component={SimplePlanScreen} options={{ tabBarLabel: 'Plan' }} />
+      <Tabs.Screen name="Reflection" component={SimpleReflectionScreen} options={{ tabBarLabel: 'Reflect' }} />
     </Tabs.Navigator>
   );
 }
