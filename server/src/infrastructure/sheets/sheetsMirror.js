@@ -22,6 +22,7 @@ const CREATE_PLAN = [
   { title: TABS.OBSTACLES, cols: TAB_SCHEMA[TABS.OBSTACLES].headers.length, rows: 1000 },
   { title: TABS.STUDY_HOURS, cols: TAB_SCHEMA[TABS.STUDY_HOURS].headers.length, rows: 2000 },
   { title: TABS.WEEKLY_PLANS, cols: TAB_SCHEMA[TABS.WEEKLY_PLANS].headers.length, rows: 500 },
+  { title: TABS.MONTHLY_PLANS, cols: TAB_SCHEMA[TABS.MONTHLY_PLANS].headers.length, rows: 120 },
 ];
 
 /**
@@ -280,6 +281,7 @@ export async function syncMonth({ client, spreadsheetId, sources, dryRun = false
     [TABS.OBSTACLES, sources.dailyLogs],
     [TABS.STUDY_HOURS, sources.dailyLogs],
     [TABS.WEEKLY_PLANS, sources.weeklyPlans],
+    [TABS.MONTHLY_PLANS, sources.monthlyPlans],
   ];
 
   for (const [tab, docs] of plan) {

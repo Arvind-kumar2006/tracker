@@ -95,7 +95,7 @@ const sample = {
 };
 
 test('the workbook has the tracker tabs', () => {
-  assert.deepEqual(Object.values(TABS), ['Daily_Tracker', 'Obstacles', 'Study_Hours', 'Weekly_Plans']);
+  assert.deepEqual(Object.values(TABS), ['Daily_Tracker', 'Obstacles', 'Study_Hours', 'Weekly_Plans', 'Monthly_Plans']);
   assert.deepEqual(Object.keys(TAB_SCHEMA), Object.values(TABS));
 });
 
@@ -155,7 +155,7 @@ test('sync writes tracker tabs and preserves manual obstacle solutions', async (
   const sources = { dailyLogs: [sample] };
 
   const first = await syncMonth({ client, spreadsheetId: 'fake-id', sources, now: FIXED_NOW });
-  assert.equal(first.tabs.length, 4);
+  assert.equal(first.tabs.length, 5);
   assert.equal(client.store.get(TABS.DAILY_TRACKER).length, 2);
   assert.equal(client.store.get(TABS.OBSTACLES).length, 2);
   assert.equal(client.store.get(TABS.STUDY_HOURS).length, 2);

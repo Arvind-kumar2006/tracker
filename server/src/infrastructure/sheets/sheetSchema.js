@@ -13,6 +13,7 @@ export const TABS = {
   OBSTACLES: 'Obstacles',
   STUDY_HOURS: 'Study_Hours',
   WEEKLY_PLANS: 'Weekly_Plans',
+  MONTHLY_PLANS: 'Monthly_Plans',
 };
 
 export const TAB_SCHEMA = {
@@ -63,6 +64,18 @@ export const TAB_SCHEMA = {
       'fixed_commitments', 'daily_time_blocks', 'extracted_obstacles', 'confirmed_at', 'synced_at',
     ],
     widths: [160, 110, 110, 110, 150, 220, 360, 360, 360, 360, 360, 360, 360, 500, 500, 600, 360, 180, 180],
+  },
+
+  [TABS.MONTHLY_PLANS]: {
+    key: 'month_id',
+    headers: [
+      'month_id', 'month_name', 'year', 'month_end', 'status', 'uploaded_image',
+      'answer_1_review', 'answer_2_blockers', 'answer_3_change', 'answer_4_outcomes',
+      'answer_5_deliverables', 'answer_6_deadlines_commitments', 'answer_7_milestones', 'answer_8_fit',
+      'monthly_outcomes', 'expected_deliverables', 'major_deadlines', 'fixed_commitments',
+      'weekly_milestones', 'extracted_obstacles', 'confirmed_at', 'synced_at',
+    ],
+    widths: [110, 150, 80, 110, 170, 220, 360, 360, 360, 360, 360, 420, 420, 360, 500, 500, 500, 500, 500, 360, 180, 180],
   },
 };
 

@@ -62,5 +62,6 @@ export async function ensureIndexes(d) {
     d.collection('import_logs').createIndex({ importedAt: -1 }),
     d.collection('quarantine').createIndex({ fileName: 1, resolvedAt: 1 }),
     d.collection('settings').createIndex({ key: 1 }, { unique: true }),
+    d.collection('monthly_plans').createIndex({ month: -1 }),
   ]);
 }

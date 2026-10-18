@@ -61,6 +61,18 @@ export function createApiClient() {
       body: { plan },
       timeoutMs: config.saveTimeoutMs,
     }),
+    getMonthlyStatus: (date) => request(endpoints.monthlyStatus(date)),
+    getMonthlyPlan: (month) => request(endpoints.monthlyPlan(month)),
+    extractMonthlyPlan: (month, image) => request(endpoints.monthlyExtract(month), {
+      method: 'POST',
+      body: { image },
+      timeoutMs: config.aiTimeoutMs,
+    }),
+    confirmMonthlyPlan: (month, plan) => request(endpoints.monthlyConfirm(month), {
+      method: 'PUT',
+      body: { plan },
+      timeoutMs: config.saveTimeoutMs,
+    }),
     getMonth: (month) => request(endpoints.month(month)),
     saveMonthPlan: (month, plan) => request(endpoints.monthPlan(month), {
       method: 'PUT',

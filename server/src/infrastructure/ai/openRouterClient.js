@@ -36,6 +36,7 @@ const MODEL_MAP = {
   reflectionQuality: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
   reflectionCoach: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
   weeklyPlanExtraction: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
+  monthlyPlanExtraction: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
 };
 
 export function createOpenRouterAdapter({ apiKey } = {}) {

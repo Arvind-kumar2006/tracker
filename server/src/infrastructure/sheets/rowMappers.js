@@ -119,11 +119,40 @@ export function weeklyPlanRow(doc, syncedAt = undefined) {
   ];
 }
 
+export function monthlyPlanRow(doc, syncedAt = undefined) {
+  const answers = doc?.answers ?? {};
+  return [
+    doc?.month ?? doc?._id ?? '',
+    doc?.monthName ?? '',
+    doc?.year ?? '',
+    doc?.monthEnd ?? '',
+    doc?.status ?? '',
+    doc?.image?.fileName ?? doc?.image?.sha256 ?? '',
+    answers.reviewLastMonth ?? '',
+    answers.blockers ?? '',
+    answers.plannedChange ?? doc?.plannedChange ?? '',
+    answers.successOutcomes ?? '',
+    answers.deliverables ?? '',
+    answers.deadlinesCommitments ?? '',
+    answers.weeklyMilestones ?? '',
+    answers.fitAssessment ?? '',
+    json(doc?.outcomes),
+    doc?.expectedDeliverables ?? '',
+    json(doc?.majorDeadlines),
+    json(doc?.fixedCommitments),
+    json(doc?.weeklyMilestones),
+    json(doc?.extractedObstacles),
+    iso(doc?.confirmedAt),
+    iso(doc?.updatedAt ?? doc?.createdAt ?? syncedAt ?? ''),
+  ];
+}
+
 export const MAPPERS = {
   [TABS.DAILY_TRACKER]: dailyTrackerRows,
   [TABS.OBSTACLES]: obstacleRows,
   [TABS.STUDY_HOURS]: (doc, now) => [studyHoursRow(doc, now)],
   [TABS.WEEKLY_PLANS]: (doc, now) => [weeklyPlanRow(doc, now)],
+  [TABS.MONTHLY_PLANS]: (doc, now) => [monthlyPlanRow(doc, now)],
 };
 
 /** Flatten documents into rows for one tab. Obstacles are deduplicated across all days. */

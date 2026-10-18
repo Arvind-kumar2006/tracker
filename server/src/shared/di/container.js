@@ -16,6 +16,7 @@ import {
   PlanCritiqueRepository,
   SettingsRepository,
   WeeklyPlanRepository,
+  MonthlyPlanRepository,
 } from '../../infrastructure/persistence/mongo/repositories.js';
 import { connect, close, ping, getDb } from '../../infrastructure/persistence/mongo/connection.js';
 import { importWorkbooks } from '../../application/useCases/importWorkbooks.js';
@@ -57,6 +58,7 @@ export const container = {
   planCritiqueRepository: PlanCritiqueRepository,
   settingsRepository: SettingsRepository,
   weeklyPlanRepository: WeeklyPlanRepository,
+  monthlyPlanRepository: MonthlyPlanRepository,
 
   // --- infrastructure singletons ---------------------------------------
   mongo: { connect, close, ping, getDb },
@@ -96,6 +98,7 @@ export const container = {
       planCritiqueRepository: PlanCritiqueRepository,
       importLogRepository: ImportLogRepository,
       weeklyPlanRepository: WeeklyPlanRepository,
+      monthlyPlanRepository: MonthlyPlanRepository,
       spreadsheetId: config.sheets.spreadsheetId,
       month,
     });

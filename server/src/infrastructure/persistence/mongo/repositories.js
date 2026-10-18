@@ -143,6 +143,110 @@ export const MonthRepository = {
 
 /* ------------------------------------------------------------------ */
 
+export const MonthlyPlanRepository = {
+  async findByMonth(month) {
+    return getDb().collection('monthly_plans').findOne({ _id: month });
+  },
+
+  async list(limit = 100) {
+    return getDb()
+      .collection('monthly_plans')
+      .find({})
+      .sort({ month: -1 })
+      .limit(limit)
+      .toArray();
+  },
+
+  async upsertDraft(month, plan) {
+    await getDb().collection('monthly_plans').updateOne(
+      { _id: month },
+      {
+        $set: {
+          ...plan,
+          _id: month,
+          month,
+          status: 'AWAITING_CONFIRMATION',
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+    return this.findByMonth(month);
+  },
+
+  async confirm(month, plan) {
+    await getDb().collection('monthly_plans').updateOne(
+      { _id: month },
+      {
+        $set: {
+          ...plan,
+          _id: month,
+          month,
+          status: 'COMPLETED',
+          confirmedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+    return this.findByMonth(month);
+  },
+
+  async markFailed(month, { monthEnd: end = null, monthName: name = null, year = null } = {}) {
+    const existing = await this.findByMonth(month);
+    if (existing?.status === 'COMPLETED' || existing?.status === 'FAILED_TO_SUBMIT') return existing;
+    const updatedAt = new Date();
+    await getDb().collection('monthly_plans').updateOne(
+      { _id: month },
+      {
+        $set: { month, status: 'FAILED_TO_SUBMIT', updatedAt },
+        $setOnInsert: {
+          createdAt: new Date(),
+          monthEnd: end,
+          monthName: name,
+          year,
+          answers: {},
+          outcomes: [],
+          expectedDeliverables: '',
+          majorDeadlines: [],
+          fixedCommitments: [],
+          weeklyMilestones: [],
+          extractedObstacles: [],
+          plannedChange: '',
+          unclearSections: [],
+          confidence: 'low',
+        },
+      },
+      { upsert: true }
+    );
+    return {
+      ...(existing ?? {
+        _id: month,
+        monthEnd: end,
+        monthName: name,
+        year,
+        answers: {},
+        outcomes: [],
+        expectedDeliverables: '',
+        majorDeadlines: [],
+        fixedCommitments: [],
+        weeklyMilestones: [],
+        extractedObstacles: [],
+        plannedChange: '',
+        unclearSections: [],
+        confidence: 'low',
+      }),
+      month,
+      status: 'FAILED_TO_SUBMIT',
+      updatedAt,
+    };
+  },
+};
+
+/* ------------------------------------------------------------------ */
+
 export const ImportLogRepository = {
   /**
    * Keyed on the file's sha256: re-importing an unchanged workbook is a no-op (FR-1.7).

@@ -226,6 +226,52 @@ export const WeeklyPlanExtractionSchema = z.object({
   confidence: z.enum(['low', 'medium', 'high']),
 });
 
+/* ---------------- monthly handwritten plan extraction ---------------- */
+
+const MonthlyAnswerSchema = z.object({
+  reviewLastMonth: z.string().max(4000),
+  blockers: z.string().max(4000),
+  plannedChange: z.string().max(4000),
+  successOutcomes: z.string().max(4000),
+  deliverables: z.string().max(4000),
+  deadlinesCommitments: z.string().max(4000),
+  weeklyMilestones: z.string().max(4000),
+  fitAssessment: z.string().max(4000),
+});
+
+const MonthlyOutcomeSchema = z.object({
+  outcome: z.string().max(500),
+  deliverable: z.string().max(700),
+});
+
+const MonthlyDeadlineSchema = z.object({
+  text: z.string().max(500),
+  date: z.string().max(80),
+});
+
+const MonthlyCommitmentSchema = z.object({
+  text: z.string().max(500),
+  when: z.string().max(120),
+});
+
+const MonthlyMilestoneSchema = z.object({
+  week: z.string().max(40),
+  milestone: z.string().max(700),
+});
+
+export const MonthlyPlanExtractionSchema = z.object({
+  answers: MonthlyAnswerSchema,
+  outcomes: z.array(MonthlyOutcomeSchema).max(3),
+  expectedDeliverables: z.string().max(4000),
+  majorDeadlines: z.array(MonthlyDeadlineSchema).max(30),
+  fixedCommitments: z.array(MonthlyCommitmentSchema).max(30),
+  weeklyMilestones: z.array(MonthlyMilestoneSchema).max(5),
+  extractedObstacles: z.array(z.string().max(300)).max(30),
+  plannedChange: z.string().max(4000),
+  unclearSections: z.array(z.string().max(160)).max(20),
+  confidence: z.enum(['low', 'medium', 'high']),
+});
+
 export const SCHEMAS = {
   detectPatterns: DetectPatternsOutputSchema,
   critique: CritiqueOutputSchema,
@@ -236,4 +282,5 @@ export const SCHEMAS = {
   reflectionQuality: ReflectionQualityOutputSchema,
   reflectionCoach: ReflectionCoachOutputSchema,
   weeklyPlanExtraction: WeeklyPlanExtractionSchema,
+  monthlyPlanExtraction: MonthlyPlanExtractionSchema,
 };

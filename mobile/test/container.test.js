@@ -72,6 +72,8 @@ test('the container and API expose daily and weekly/monthly planning operations'
     ['loadDay', 'getDay'], ['loadReflectionCoach', 'getReflectionCoach'], ['loadSheetsStatus', 'getSheetsStatus'],
     ['saveDailyPlan', 'saveDailyPlan'], ['saveDailyEntry', 'saveDailyEntry'], ['loadWeeklyStatus', 'getWeeklyStatus'],
     ['loadWeeklyPlan', 'getWeeklyPlan'], ['extractWeeklyPlan', 'extractWeeklyPlan'], ['confirmWeeklyPlan', 'confirmWeeklyPlan'],
+    ['loadMonthlyStatus', 'getMonthlyStatus'], ['loadMonthlyPlan', 'getMonthlyPlan'],
+    ['extractMonthlyPlan', 'extractMonthlyPlan'], ['confirmMonthlyPlan', 'confirmMonthlyPlan'],
     ['loadMonth', 'getMonth'], ['saveMonthPlan', 'saveMonthPlan'],
   ]) {
     assert.match(container, new RegExp(`\\b${containerKey}\\s*:`));

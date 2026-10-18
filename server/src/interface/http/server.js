@@ -17,6 +17,7 @@ import { dailyEntryRouter } from './dailyEntryRoute.js';
 import { dailyPlanRouter } from './dailyPlanRoute.js';
 import { focusSessionRouter } from './focusSessionRoute.js';
 import { weeklyPlanRouter } from './weeklyPlanRoute.js';
+import { monthlyPlanRouter } from './monthlyPlanRoute.js';
 import { REFLECTION_QUESTIONS } from '../../domain/entities/reflectionQuestions.js';
 import { buildReflectionCoachFallback } from '../../domain/services/ReflectionCoach.js';
 import { buildMechanicalReflectionQualityReport } from '../../infrastructure/ai/graphs/reflectionQualityGraph.js';
@@ -54,6 +55,7 @@ export function createApp({ expressFactory = express } = {}) {
   app.use(dailyPlanRouter());
   app.use(focusSessionRouter());
   app.use(weeklyPlanRouter());
+  app.use(monthlyPlanRouter());
 
   /**
    * Every mutating route below takes JSON.
