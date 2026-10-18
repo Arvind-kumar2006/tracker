@@ -15,10 +15,19 @@
       "package": "com.arvindkumar.studytracker"
     },
     "plugins": [
-      ["expo-image-picker", {
-        "photosPermission": "Allow Study Accountability Tracker to choose your weekly planning sheet.",
-        "cameraPermission": "Allow Study Accountability Tracker to photograph your weekly planning sheet."
-      }]
-    ]
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Study Accountability Tracker to choose your weekly planning sheet.",
+          "cameraPermission": "Allow Study Accountability Tracker to photograph your weekly planning sheet."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e4f596ce-8e65-455b-86e0-48e1c659a7ae"
+      }
+    },
+    "owner": "mr.chakeniya"
   }
 }
