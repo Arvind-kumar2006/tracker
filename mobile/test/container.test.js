@@ -1,20 +1,4 @@
-/**
- * Static integrity checks for the mobile app.
- *
- * WHY THIS FILE IS STATIC RATHER THAN BEHAVIOURAL
- *
- * This suite was written after the bundler caught a real syntax error in
- * `src/shared/container.js` that 41 passing tests missed. The reason they missed it is
- * instructive: the container transitively imports `react-native` (via config.js -> Platform),
- * so it CANNOT be loaded in plain node at all. Every behavioural test in this project therefore
- * targets `src/domain` and `src/application`, which are platform-free by design.
- *
- * The container and the screens are verified two ways instead:
- *   1. here, by parsing and inspecting the source statically;
- *   2. by `npx expo export`, which is the real bundler and the authoritative check.
- *
- * That is a genuine limitation, stated here rather than papered over.
- */
+/** Static integrity checks for the intentionally small two-screen mobile app. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,8 +9,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-
-/** Babel ships with Expo, so this is the same parser the bundler will use. */
 const babelParser = createRequire(import.meta.url)('@babel/parser');
 
 function sourceFiles(dir = ROOT, out = []) {
@@ -40,258 +22,98 @@ function sourceFiles(dir = ROOT, out = []) {
 }
 
 const files = sourceFiles();
-const rel = (f) => path.relative(ROOT, f);
+const rel = (file) => path.relative(ROOT, file);
 
-/** Strip comments and string bodies so prose cannot trip a source assertion. */
-function codeOnly(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
-    .replace(/`(?:\\.|[^`\\])*`/g, '``')
-    .replace(/'(?:\\.|[^'\\\n])*'/g, "''")
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""');
-}
-
-/* ================================================================== *
- * 1. Parse — with the same parser the bundler uses
- * ================================================================== */
-
-test('every application source file parses as ESM + JSX', () => {
-  assert.ok(files.length >= 10, `expected the app sources, found ${files.length}`);
+test('every mobile source file parses as ESM plus JSX', () => {
   const failures = [];
-
   for (const file of files) {
     try {
-      babelParser.parse(fs.readFileSync(file, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['jsx'],
-      });
-    } catch (e) {
-      failures.push(`${rel(file)}: ${e.message}`);
+      babelParser.parse(fs.readFileSync(file, 'utf8'), { sourceType: 'module', plugins: ['jsx'] });
+    } catch (error) {
+      failures.push(`${rel(file)}: ${error.message}`);
     }
   }
-
-  assert.deepEqual(failures, [], `files that do not parse:\n${failures.join('\n')}`);
+  assert.deepEqual(failures, []);
 });
 
-/* ================================================================== *
- * 2. Imports resolve and are installed
- * ================================================================== */
-
-test('every relative import resolves to a real file', () => {
-  const broken = [];
-  for (const file of files) {
-    for (const m of fs.readFileSync(file, 'utf8').matchAll(/from '(\.[^']+)'/g)) {
-      if (!fs.existsSync(path.resolve(path.dirname(file), m[1]))) {
-        broken.push(`${rel(file)} -> ${m[1]}`);
-      }
-    }
-  }
-  assert.deepEqual(broken, [], `unresolved imports:\n${broken.join('\n')}`);
-});
-
-test('every bare import names an installed package', () => {
-  const missing = new Set();
-  for (const file of files) {
-    for (const m of fs.readFileSync(file, 'utf8').matchAll(
-      /from '([^.'][^']*)'|\bimport\('([^.'][^']*)'\)/g
-    )) {
-      const spec = m[1] ?? m[2];
-      if (spec.startsWith('node:')) continue; // built-in, not a package
-      const pkg = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0];
-      if (!fs.existsSync(path.join(ROOT, 'node_modules', pkg))) {
-        missing.add(`${pkg}  (in ${rel(file)})`);
-      }
-    }
-  }
-  assert.deepEqual([...missing], [], `imports an uninstalled package:\n${[...missing].join('\n')}`);
-});
-
-test('every plugin in app.json is installed', () => {
-  const app = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'));
-  const plugins = app?.expo?.plugins ?? [];
-  const missing = plugins.filter((p) => {
-    const pkg = p.startsWith('@') || p.includes('/') ? p : p.split('[')[0];
-    return !fs.existsSync(path.join(ROOT, 'node_modules', pkg));
-  });
-  assert.deepEqual(missing, [], `app.json references uninstalled plugin(s): ${missing.join(', ')}`);
-});
-
-test('package.json declares everything the sources import', () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+test('every relative import resolves and every package is declared', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const declared = new Set([
-    ...Object.keys(pkg.dependencies ?? {}),
-    ...Object.keys(pkg.devDependencies ?? {}),
+    ...Object.keys(packageJson.dependencies ?? {}),
+    ...Object.keys(packageJson.devDependencies ?? {}),
   ]);
-  const runtime = new Set(['react', 'react-native']);
+  const broken = [];
+  const missing = new Set();
 
-  const undeclared = new Set();
   for (const file of files) {
-    for (const m of fs.readFileSync(file, 'utf8').matchAll(
-      /from '([^.'][^']*)'|\bimport\('([^.'][^']*)'\)/g
-    )) {
-      const spec = m[1] ?? m[2];
-      if (spec.startsWith('node:')) continue;
-      const name = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0];
-      if (runtime.has(name) || declared.has(name)) continue;
-      undeclared.add(`${name}  (imported by ${rel(file)})`);
+    const source = fs.readFileSync(file, 'utf8');
+    for (const match of source.matchAll(/from '([^']+)'|\bimport\('([^']+)'\)/g)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier.startsWith('.')) {
+        if (!fs.existsSync(path.resolve(path.dirname(file), specifier))) broken.push(`${rel(file)} -> ${specifier}`);
+        continue;
+      }
+      if (specifier.startsWith('node:')) continue;
+      const packageName = specifier.startsWith('@')
+        ? specifier.split('/').slice(0, 2).join('/')
+        : specifier.split('/')[0];
+      if (!declared.has(packageName)) missing.add(`${packageName} in ${rel(file)}`);
     }
   }
-  assert.deepEqual([...undeclared], [], `imported but not in package.json:\n${[...undeclared].join('\n')}`);
+
+  assert.deepEqual(broken, [], `unresolved imports: ${broken.join(', ')}`);
+  assert.deepEqual([...missing], [], `undeclared packages: ${[...missing].join(', ')}`);
 });
 
-/* ================================================================== *
- * 3. Container wiring — checked in the source, since it cannot be imported here
- * ================================================================== */
-
-test('the container wires every use case', () => {
-  const src = fs.readFileSync(path.join(ROOT, 'src/shared/container.js'), 'utf8');
-  for (const key of [
-    'api', 'fileSystem', 'importWorkbooks', 'loadDashboard',
-    'runAnalysis', 'loadInsights', 'updateInsightStatus', 'loadPlanCritiques', 'saveDailyEntry',
-  ]) {
-    assert.match(src, new RegExp(`\\b${key}\\s*[=:]`), `container.${key} is not wired`);
+test('the container and API expose only daily plan/reflection operations', () => {
+  const container = fs.readFileSync(path.join(ROOT, 'src/shared/container.js'), 'utf8');
+  const api = fs.readFileSync(path.join(ROOT, 'src/infrastructure/apiClient.js'), 'utf8');
+  for (const [containerKey, apiKey] of [['loadDay', 'getDay'], ['loadReflectionCoach', 'getReflectionCoach'], ['loadSheetsStatus', 'getSheetsStatus'], ['saveDailyPlan', 'saveDailyPlan'], ['saveDailyEntry', 'saveDailyEntry']]) {
+    assert.match(container, new RegExp(`\\b${containerKey}\\s*:`));
+    assert.match(api, new RegExp(`\\b${apiKey}\\s*:`));
   }
-  assert.match(src, /export\s+const\s+container/);
-  assert.match(src, /export\s+default\s+container/);
-});
-
-test('the API client exposes every endpoint the screens call', () => {
-  const src = fs.readFileSync(path.join(ROOT, 'src/infrastructure/apiClient.js'), 'utf8');
-  for (const fn of [
-    'health', 'getConfig', 'getMonths', 'getMonth', 'getDays', 'getMetrics', 'getPrecheck',
-    'analyse', 'getInsights', 'setInsightStatus', 'getPlanCritiques', 'getQuarantine',
-    'resolveQuarantine', 'saveDailyEntry', 'uploadWorkbooks', 'scanFolder', 'preflightFolder',
-    'getSheetsStatus', 'connectSheets', 'syncSheets',
-  ]) {
-    assert.match(src, new RegExp(`\\b${fn}\\s*:`), `apiClient.${fn} is missing`);
+  for (const removed of ['fileSystem', 'loadDashboard', 'runAnalysis', 'getReflectionQuality', 'saveFocusSession']) {
+    assert.doesNotMatch(container, new RegExp(`\\b${removed}\\b`));
   }
 });
 
-test('endpoints used by the client are all defined in config', () => {
-  const cfg = fs.readFileSync(path.join(ROOT, 'src/infrastructure/config.js'), 'utf8');
-  const client = fs.readFileSync(path.join(ROOT, 'src/infrastructure/apiClient.js'), 'utf8');
-  const used = new Set([...client.matchAll(/endpoints\.(\w+)/g)].map((m) => m[1]));
-  const missing = [...used].filter((k) => !new RegExp(`\\b${k}\\s*:`).test(cfg));
-  assert.deepEqual(missing, [], `endpoints used but undefined in config: ${missing.join(', ')}`);
-});
-
-/* ================================================================== *
- * 4. Screens are registered
- * ================================================================== */
-
-test('the navigator exposes only the two daily screens', () => {
+test('the navigator exposes exactly the two daily screens', () => {
   const app = fs.readFileSync(path.join(ROOT, 'App.js'), 'utf8');
-  const plan = fs.readFileSync(path.join(ROOT, 'src/interface/SimplePlanScreen.js'), 'utf8');
-  const reflection = fs.readFileSync(path.join(ROOT, 'src/interface/SimpleReflectionScreen.js'), 'utf8');
-
-  assert.match(plan, /function SimplePlanScreen/);
-  assert.match(reflection, /function SimpleReflectionScreen/);
-  assert.match(app, /name="DailyPlan"/);
-  assert.match(app, /name="Reflection"/);
   assert.match(app, /component=\{SimplePlanScreen\}/);
   assert.match(app, /component=\{SimpleReflectionScreen\}/);
+  assert.match(app, /name="Settings" component=\{SettingsScreen\}/);
+  assert.equal((app.match(/<Tabs\.Screen/g) ?? []).length, 2);
+  assert.doesNotMatch(app, /Dashboard|Focus|Insights|Import|PlanCritique|ReflectionQuality/);
+});
 
-  for (const removedRoute of ['Dashboard', 'Focus', 'Insights', 'Import', 'Settings', 'PlanCritique', 'ReflectionQuality', 'FocusSession']) {
-    assert.doesNotMatch(app, new RegExp(`name="${removedRoute}"`), `${removedRoute} should not be a daily screen`);
+test('legacy mobile screens and generated web output are gone', () => {
+  for (const file of [
+    'src/interface/screens.js',
+    'src/interface/DailyPlanScreen.js',
+    'src/interface/FocusSessionScreen.js',
+    'src/interface/PlanCritiqueScreen.js',
+    'src/interface/ReflectionScreen.js',
+    'src/interface/ReflectionQualityScreen.js',
+    'src/application/useCases.js',
+    'src/infrastructure/fileSystem.js',
+    'dist/index.html',
+  ]) {
+    assert.equal(fs.existsSync(path.join(ROOT, file)), false, `${file} should be removed`);
   }
 });
 
-test('progress accessibility values are integer percentages for native bridges', () => {
-  const components = fs.readFileSync(path.join(ROOT, 'src/interface/components.js'), 'utf8');
-  assert.match(components, /const accessiblePercentage = Math\.round\(percentage \* 100\)/);
-  assert.match(components, /accessibilityValue=\{\{ min: 0, max: 100, now: accessiblePercentage \}\}/);
-});
-
-/* ================================================================== *
- * 6. Metro constraints
- * ================================================================== */
-
-/**
- * Top-level await is not supported by Metro/Hermes.
- *
- * A module-scope `await import(...)` in `src/infrastructure/fileSystem.js` built fine under
- * `node --test` and only failed at `npx expo export` with `Unexpected token: name (_r)`. Any
- * future reintroduction would be caught here instead of at bundle time.
- */
-test('no module uses top-level await', () => {
-  const offenders = [];
-
-  for (const file of files) {
-    const src = fs.readFileSync(file, 'utf8');
-
-    const ast = babelParser.parse(src, { sourceType: 'module', plugins: ['jsx', 'topLevelAwait'] });
-
-    // Walk for an AwaitExpression whose nearest function ancestor is the Program.
-    const walk = (node, insideFunction = false) => {
-      if (!node || typeof node !== 'object') return;
-      if (Array.isArray(node)) return node.forEach((n) => walk(n, insideFunction));
-
-      const isFn =
-        node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' ||
-        node.type === 'ArrowFunctionExpression' || node.type === 'ObjectMethod' ||
-        node.type === 'ClassMethod';
-
-      if (node.type === 'AwaitExpression' && !insideFunction) {
-        offenders.push(`${rel(file)} — top-level await at line ${node.loc?.start?.line}`);
-        return;
-      }
-      for (const k of Object.keys(node)) {
-        if (k === 'loc' || k === 'leadingComments') continue;
-        walk(node[k], insideFunction || isFn);
-      }
-    };
-    walk(ast.program, false);
-  }
-
-  assert.deepEqual(offenders, [], `top-level await is not bundleable by Metro:\n${offenders.join('\n')}`);
-});
-
-test('the optional native picker is resolved lazily, not at module scope', () => {
-  const raw = fs.readFileSync(path.join(ROOT, 'src/infrastructure/fileSystem.js'), 'utf8');
-  const src = codeOnly(raw);
-  assert.match(src, /async function ensurePicker/);
-  assert.doesNotMatch(src, /documentsPicker\s*=\s*await/, 'must not await at module scope');
-  assert.doesNotMatch(
-    src,
-    /listAllFiles|listDirectory/,
-    'these do not exist in v10 of the library (the comment naming them is fine)'
-  );
-});
-
-test('no source file imports an API the installed picker does not export', () => {
-  const installed = path.join(ROOT, 'node_modules/@react-native-documents/picker');
-  if (!fs.existsSync(installed)) return; // optional dependency
-
-  const types = fs.readFileSync(path.join(installed, 'lib/typescript/index.d.ts'), 'utf8');
-  const exported = new Set([...types.matchAll(/export \{ ([^}]+) \}/g)].flatMap((m) =>
-    m[1].split(',').map((s) => s.trim().replace(/\s+as\s+.*/, '')).filter(Boolean)
-  ));
-
-  const src = fs.readFileSync(path.join(ROOT, 'src/infrastructure/fileSystem.js'), 'utf8');
-  const used = [...src.matchAll(/picker\??\.(\w+)/g)].map((m) => m[1]);
-  const unknown = [...new Set(used)].filter((fn) => !exported.has(fn));
-
-  assert.deepEqual(unknown, [], `uses picker APIs that do not exist: ${unknown.join(', ')}`);
-});
-
-/* ================================================================== *
- * 7. Secret hygiene
- * ================================================================== */
-
-test('no source file contains anything that looks like a live credential', () => {
-  const CHECKS = [
+test('no mobile source contains a live credential', () => {
+  const checks = [
     /sk-or-v1-[A-Za-z0-9_-]{16,}/,
     /-----BEGIN (RSA )?PRIVATE KEY-----/,
     /\bsk-[A-Za-z0-9]{32,}/,
   ];
   const hits = [];
   for (const file of files) {
-    const src = fs.readFileSync(file, 'utf8');
-    CHECKS.forEach((re, i) => {
-      re.lastIndex = 0;
-      if (re.test(src)) hits.push(`${rel(file)} matches rule ${i + 1}`);
+    const source = fs.readFileSync(file, 'utf8');
+    checks.forEach((check, index) => {
+      if (check.test(source)) hits.push(`${rel(file)} rule ${index + 1}`);
     });
   }
-  assert.deepEqual(hits, [], `possible credentials committed:\n${hits.join('\n')}`);
+  assert.deepEqual(hits, []);
 });

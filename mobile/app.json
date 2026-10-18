@@ -9,18 +9,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.arvindkumar.studytracker",
-      "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Select your study tracker spreadsheets to import."
-      }
+      "bundleIdentifier": "com.arvindkumar.studytracker"
     },
     "android": {
-      "package": "com.arvindkumar.studytracker",
-      "permissions": []
-    },
-    "plugins": [
-      "expo-document-picker",
-      "expo-asset"
-    ]
+      "package": "com.arvindkumar.studytracker"
+    }
   }
 }

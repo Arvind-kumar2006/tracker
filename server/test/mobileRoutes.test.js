@@ -33,6 +33,7 @@ test('buildEntryFromInput maps app fields onto the canonical schema', () => {
     date: '2026-10-14',
     payload: {
       accomplished: 'Finished the RAG lecture and wrote notes',
+      buildNote: 'A small RAG demo with three test questions',
       blockers: 'Slept till 9\nPhone during breaks',
       buildOutcome: 'BUILT',
       targetMet: 'partial',
@@ -46,6 +47,7 @@ test('buildEntryFromInput maps app fields onto the canonical schema', () => {
   assert.equal(e.hasData, true);
   assert.equal(e.targetMet, 'PARTIAL');
   assert.equal(e.buildOutcome, 'BUILT');
+  assert.equal(e.buildNote, 'A small RAG demo with three test questions');
   assert.equal(e.blockers.segments.length, 2);
   assert.equal(e.plan.declaredHours, 3);
 });

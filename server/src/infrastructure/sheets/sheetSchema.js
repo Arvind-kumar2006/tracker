@@ -38,9 +38,9 @@ export const TAB_SCHEMA = {
       'variance_pct', 'target_met', 'accomplished', 'build_outcome', 'build_note', 'blockers',
       'machine_written_blockers', 'tomorrow_change', 'time_blocks', 'source_file', 'content_hash',
       'synced_at', 'floor_hit', 'floor_hit_reason', 'plan_bend', 'focus_sessions',
-      'plan_minimum_min', 'plan_ideal_min', 'plan_break_min', 'plan_buffer_min', 'plan_tasks',
+      'plan_minimum_min', 'plan_ideal_min', 'plan_break_min', 'plan_buffer_min', 'plan_tasks', 'plan_blocks',
     ],
-    widths: [100, 80, 90, 300, 420, 100, 110, 90, 90, 90, 90, 110, 120, 100, 100, 420, 110, 300, 420, 130, 300, 360, 190, 120, 150, 90, 420, 420, 420, 100, 100, 100, 100, 520],
+    widths: [100, 80, 90, 300, 420, 100, 110, 90, 90, 90, 90, 110, 120, 100, 100, 420, 110, 300, 420, 130, 300, 360, 190, 120, 150, 90, 420, 420, 420, 100, 100, 100, 100, 520, 620],
   },
 
   [TABS.TIME_BLOCKS]: {

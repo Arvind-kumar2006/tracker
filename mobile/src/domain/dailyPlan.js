@@ -2,6 +2,25 @@
 
 export const MAX_DAILY_PRIORITIES = 3;
 export const PLAN_PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'];
+export const WORK_TYPES = ['Mid-sem', 'GenAI', 'Coding', 'English', 'Internship/OJT', 'Buffer', 'Other'];
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export function normaliseTime(value) {
+  const candidate = String(value ?? '').trim();
+  return TIME_PATTERN.test(candidate) ? candidate : '';
+}
+
+export function durationBetween(startTime, endTime) {
+  const start = normaliseTime(startTime);
+  const end = normaliseTime(endTime);
+  if (!start || !end) return 0;
+  const toMinutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+  const startMinutes = toMinutes(start);
+  const endMinutes = toMinutes(end);
+  const duration = endMinutes - startMinutes;
+  return duration > 0 ? duration : duration < 0 ? duration + 24 * 60 : 0;
+}
 
 export function emptyTask(index = 0) {
   return {
@@ -10,6 +29,9 @@ export function emptyTask(index = 0) {
     outcome: '',
     estimatedMinutes: '30',
     priority: index === 0 ? 'HIGH' : 'MEDIUM',
+    workType: 'Other',
+    startTime: '',
+    endTime: '',
   };
 }
 
@@ -35,10 +57,13 @@ export function planToPayload(form) {
       id: item.id,
       text: item.text.trim(),
       outcome: item.outcome.trim(),
-      estimatedMinutes: minutes(item.estimatedMinutes),
+      estimatedMinutes: durationBetween(item.startTime, item.endTime) || minutes(item.estimatedMinutes),
       priority: item.priority,
       status: item.status ?? 'PLANNED',
       actualMinutes: minutes(item.actualMinutes),
+      workType: WORK_TYPES.includes(item.workType) ? item.workType : 'Other',
+      ...(normaliseTime(item.startTime) ? { startTime: normaliseTime(item.startTime) } : {}),
+      ...(normaliseTime(item.endTime) ? { endTime: normaliseTime(item.endTime) } : {}),
     })),
     minimumMinutes: minutes(form.minimumMinutes),
     idealMinutes: minutes(form.idealMinutes),
@@ -57,6 +82,9 @@ export function planToForm(plan) {
     priority: PLAN_PRIORITIES.includes(item.priority) ? item.priority : 'MEDIUM',
     status: item.status ?? 'PLANNED',
     actualMinutes: item.actualMinutes ?? 0,
+    workType: WORK_TYPES.includes(item.workType ?? item.type) ? (item.workType ?? item.type) : 'Other',
+    startTime: normaliseTime(item.startTime ?? item.start),
+    endTime: normaliseTime(item.endTime ?? item.end),
   }));
 
   return {

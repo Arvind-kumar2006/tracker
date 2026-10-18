@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SimpleReflectionScreen } from './src/interface/SimpleReflectionScreen.js';
 import { SimplePlanScreen } from './src/interface/SimplePlanScreen.js';
+import { SettingsScreen } from './src/interface/SettingsScreen.js';
 import { colors, styles } from './src/interface/theme.js';
 
 const Stack = createNativeStackNavigator();
@@ -37,6 +38,7 @@ export default function App() {
           screenOptions={{ headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
         >
           <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

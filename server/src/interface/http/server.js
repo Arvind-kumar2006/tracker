@@ -17,7 +17,10 @@ import { dailyEntryRouter } from './dailyEntryRoute.js';
 import { dailyPlanRouter } from './dailyPlanRoute.js';
 import { focusSessionRouter } from './focusSessionRoute.js';
 import { REFLECTION_QUESTIONS } from '../../domain/entities/reflectionQuestions.js';
+import { buildReflectionCoachFallback } from '../../domain/services/ReflectionCoach.js';
 import { buildMechanicalReflectionQualityReport } from '../../infrastructure/ai/graphs/reflectionQualityGraph.js';
+import { reflectionCoachPrompt } from '../../infrastructure/ai/prompts.js';
+import { SCHEMAS } from '../../infrastructure/ai/schemas.js';
 import { parseServiceAccount } from '../../infrastructure/sheets/googleSheetsClient.js';
 
 export function createApp({ expressFactory = express } = {}) {
@@ -350,6 +353,64 @@ export function createApp({ expressFactory = express } = {}) {
         ...buildMechanicalReflectionQualityReport({ date: req.params.date, entry, history, warning: mechanicalWarning }),
         qualitySource: 'mechanical',
       }));
+    }
+  });
+
+  /** Three short, post-save signals for the intentionally small reflection screen. */
+  app.get('/api/reflection-coach/:date', async (req, res) => {
+    await bootstrap();
+
+    const entry = await container.dailyLogRepository.findByDate(req.params.date);
+    if (!entry) {
+      return res.status(404).json({ error: 'no entry for that date' });
+    }
+
+    const fallback = buildReflectionCoachFallback(entry);
+    const fallbackResponse = {
+      date: req.params.date,
+      ...fallback,
+      source: 'fallback',
+    };
+
+    if (!process.env.OPENROUTER_API_KEY) {
+      return res.json(fallbackResponse);
+    }
+
+    const planText = entry.plan?.items?.length
+      ? entry.plan.items.map((item) => (
+        `${item.start ?? '?'}-${item.end ?? '?'}: ${item.text ?? item.task ?? '(untitled)'}${(item.outcome ?? item.doneWhen) ? `; done when: ${item.outcome ?? item.doneWhen}` : ''}`
+      )).join('\n')
+      : '(no plan saved)';
+
+    try {
+      const { createOpenRouterAdapter } = await import('../../infrastructure/ai/openRouterClient.js');
+      const result = await createOpenRouterAdapter().structured({
+        task: 'reflectionCoach',
+        system: 'You are a concise, grounded daily accountability coach. Be useful without being judgmental.',
+        prompt: reflectionCoachPrompt({ date: req.params.date, entry, planText }),
+        schema: SCHEMAS.reflectionCoach,
+        temperature: 0.2,
+        maxTokens: 500,
+      });
+
+      const data = result.data ?? {};
+      const output = {
+        date: req.params.date,
+        observation: String(data.observation ?? '').trim(),
+        obstaclePattern: String(data.obstaclePattern ?? '').trim(),
+        tomorrowSuggestion: String(data.tomorrowSuggestion ?? '').trim(),
+        source: 'ai',
+        model: result.model,
+        fellBack: result.fellBack,
+      };
+
+      if (!output.observation || !output.obstaclePattern || !output.tomorrowSuggestion) {
+        return res.json(fallbackResponse);
+      }
+      return res.json(output);
+    } catch {
+      // A provider failure must not make the reflection feel broken after it was saved.
+      return res.json(fallbackResponse);
     }
   });
 

@@ -1,47 +1,17 @@
-/**
- * DI container for the app. Wires infrastructure adapters to the application use cases.
- * Hand-rolled, no framework — matching the server.
- */
+/** Small DI container for the two daily screens. */
 
 import { createApiClient } from '../infrastructure/apiClient.js';
-import { createFileSystem } from '../infrastructure/fileSystem.js';
-import {
-  importWorkbooks, loadDashboard, runAnalysis, loadInsights, updateInsightStatus,
-} from '../application/useCases.js';
 
 const api = createApiClient();
-const fileSystem = createFileSystem();
 
 export const container = {
   api,
-  fileSystem,
-
-  importWorkbooks: (opts) => importWorkbooks({ fileSystem, api, ...opts }),
-  loadDashboard: (opts) => loadDashboard({ api, ...opts }),
-  runAnalysis: (opts) => runAnalysis({ api, ...opts }),
-  loadInsights: (opts) => loadInsights({ api, ...opts }),
-  updateInsightStatus: (opts) => updateInsightStatus({ api, ...opts }),
-  loadPlanCritiques: () => api.getPlanCritiques(),
   loadDay: (date) => api.getDay(date),
+  loadReflectionCoach: (date) => api.getReflectionCoach(date),
+  loadSheetsStatus: () => api.getSheetsStatus(),
   saveDailyPlan: (date, plan) => api.saveDailyPlan(date, plan),
-  carryForwardPlan: (date, targetDate) => api.carryForwardPlan(date, targetDate),
-  generateDailyPlan: (date, input) => api.generateDailyPlan(date, input),
-  checkDailyPlan: (date, plan) => api.checkDailyPlan(date, plan),
-  saveFocusSession: (date, session) => api.saveFocusSession(date, session),
-
-  /**
-   * Saving a daily entry.
-   *
-   * Deliberately appends through the API rather than editing the xlsx: the workbook is an
-   * artefact you own, and silently rewriting someone's file is a worse default than a row in
-   * the app that the next import will reconcile.
-   */
-  saveDailyEntry: async ({ date, accomplished, blockers, buildOutcome, targetMet, plannedHours, floorHit, floorHitReason, planBend, tomorrowChange }) =>
-    api.saveDailyEntry({ date, accomplished, blockers, buildOutcome, targetMet, plannedHours, floorHit, floorHitReason, planBend, tomorrowChange }),
-
-  /** Phase 7: reflection quality check. */
-  getReflectionQuestions: () => api.getReflectionQuestions(),
-  getReflectionQuality: (date) => api.getReflectionQuality(date),
+  saveDailyEntry: async ({ date, accomplished, buildNote, blockers, buildOutcome, targetMet, plannedHours, floorHit, floorHitReason, planBend, tomorrowChange }) =>
+    api.saveDailyEntry({ date, accomplished, buildNote, blockers, buildOutcome, targetMet, plannedHours, floorHit, floorHitReason, planBend, tomorrowChange }),
 };
 
 export default container;

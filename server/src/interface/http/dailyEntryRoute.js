@@ -42,6 +42,7 @@ export function buildEntryFromInput({ date, payload }) {
   const clamp = (s) => (s === null || s === undefined ? '' : String(s).slice(0, MAX_FIELD));
 
   const accomplished = clamp(payload.accomplished);
+  const buildNote = clamp(payload.buildNote);
   const blockerText = clamp(payload.blockers);
   const buildOutcome = coerceEnum(payload.buildOutcome, Object.values(BuildOutcome), parseBuildOutcome);
   const targetMet = coerceEnum(payload.targetMet, Object.values(TargetMet), parseTargetMet);
@@ -65,6 +66,7 @@ export function buildEntryFromInput({ date, payload }) {
 
   const hasData =
     accomplished !== '' ||
+    buildNote !== '' ||
     segments.length > 0 ||
     buildOutcome !== null ||
     targetMet !== null ||
@@ -93,8 +95,8 @@ export function buildEntryFromInput({ date, payload }) {
     totalWarning: null,
     targetMet,
     accomplished,
+    buildNote,
     buildOutcome,
-    buildNote: '',
     blockers: { raw: blockerText, segments, machineWritten: false },
     tomorrowChange: clamp(payload.tomorrowChange),
     // Phase 7: 5-question reflection fields
@@ -120,9 +122,17 @@ export async function saveDailyEntry({ date, payload, repositories, sheetsSync =
   // Reflection is a partial update. Preserve imported plans, time blocks, measured minutes, and
   // provenance instead of replacing them with the empty values used by the reflection payload.
   if (existing) {
+    const has = (key) => Object.prototype.hasOwnProperty.call(payload, key);
     entry = {
       ...existing,
       ...entry,
+      // Reflection is a partial update. Preserve fields that this compact four-question form
+      // does not expose, while still accepting them from older clients when they are present.
+      buildOutcome: has('buildOutcome') ? entry.buildOutcome : existing.buildOutcome,
+      buildNote: has('buildNote') ? entry.buildNote : existing.buildNote,
+      floorHit: has('floorHit') ? entry.floorHit : existing.floorHit,
+      floorHitReason: has('floorHitReason') ? entry.floorHitReason : existing.floorHitReason,
+      planBend: has('planBend') ? entry.planBend : existing.planBend,
       // `plannedHours` is a legacy reflection field. If it is submitted, update only the
       // declared-hours value and keep the actual task list from the existing plan.
       plan: Object.prototype.hasOwnProperty.call(payload, 'plannedHours')

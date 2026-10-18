@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyDailyPlan,
+  durationBetween,
   planToPayload,
   planToForm,
   reviewPlan,
@@ -31,6 +32,24 @@ test('saved plans can be loaded back into the editable form', () => {
   assert.equal(form.items[0].text, 'Build API');
   assert.equal(form.items[0].estimatedMinutes, '60');
   assert.equal(form.items[0].priority, 'HIGH');
+});
+
+test('time-block fields round-trip and duration comes from the selected times', () => {
+  const form = emptyDailyPlan();
+  form.items[0].text = 'Study Chapter 4';
+  form.items[0].outcome = 'Complete the practice questions';
+  form.items[0].workType = 'Mid-sem';
+  form.items[0].startTime = '09:00';
+  form.items[0].endTime = '10:30';
+
+  const payload = planToPayload(form);
+  assert.equal(durationBetween('09:00', '10:30'), 90);
+  assert.equal(payload.items[0].estimatedMinutes, 90);
+  assert.equal(payload.items[0].workType, 'Mid-sem');
+
+  const loaded = planToForm(payload);
+  assert.equal(loaded.items[0].startTime, '09:00');
+  assert.equal(loaded.items[0].endTime, '10:30');
 });
 
 test('plan review flags vague work and schedule overload without changing the plan', () => {

@@ -173,6 +173,14 @@ export const ReflectionQualityOutputSchema = z.object({
   confidence: z.enum(['low', 'medium', 'high']).default('low'),
 });
 
+/* ---------------- reflectionCoach ---------------- */
+
+export const ReflectionCoachOutputSchema = z.object({
+  observation: z.string().min(1).max(240),
+  obstaclePattern: z.string().min(1).max(240),
+  tomorrowSuggestion: z.string().min(1).max(240),
+});
+
 export const SCHEMAS = {
   detectPatterns: DetectPatternsOutputSchema,
   critique: CritiqueOutputSchema,
@@ -181,4 +189,5 @@ export const SCHEMAS = {
   planQuality: PlanQualityOutputSchema,
   planGeneration: PlanGenerationOutputSchema,
   reflectionQuality: ReflectionQualityOutputSchema,
+  reflectionCoach: ReflectionCoachOutputSchema,
 };

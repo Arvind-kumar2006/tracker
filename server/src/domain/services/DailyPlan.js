@@ -20,8 +20,22 @@ function priority(value) {
 }
 
 function status(value) {
-  const candidate = String(value ?? '').trim().toUpperCase();
+  const candidate = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '_');
+  if (candidate === 'PARTLY') return 'PARTIAL';
+  if (candidate === 'MOVED_TO_BUFFER') return 'MOVED';
   return PLAN_STATUSES.includes(candidate) ? candidate : 'PLANNED';
+}
+
+function time(value) {
+  const candidate = String(value ?? '').trim();
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(candidate) ? candidate : '';
+}
+
+function durationBetween(startTime, endTime) {
+  if (!startTime || !endTime) return 0;
+  const toMinutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+  const duration = toMinutes(endTime) - toMinutes(startTime);
+  return duration > 0 ? duration : duration < 0 ? duration + 24 * 60 : 0;
 }
 
 /**
@@ -47,22 +61,51 @@ export function buildDailyPlan({ date, input = {} } = {}) {
       throw new DomainError(ErrorCode.UNPARSEABLE_VALUE, `priority ${index + 1} needs a task.`);
     }
 
-    const estimatedMinutes = boundedMinutes(raw?.estimatedMinutes, 30);
+    const startTime = time(raw?.start ?? raw?.startTime);
+    const endTime = time(raw?.end ?? raw?.endTime);
+    const estimatedMinutes = durationBetween(startTime, endTime) || boundedMinutes(raw?.estimatedMinutes, 30);
     if (estimatedMinutes < 5) {
       throw new DomainError(ErrorCode.IMPOSSIBLE_RANGE, `priority ${index + 1} needs at least 5 minutes.`);
     }
 
+    const task = text;
+    const doneWhen = clampText(raw?.doneWhen ?? raw?.outcome);
+    const type = clampText(raw?.type ?? raw?.workType).slice(0, 40) || 'Other';
+    const isMust = Boolean(raw?.isMust) || priority(raw?.priority) === 'HIGH';
+
     return {
       id: clampText(raw?.id) || `${date}-${index + 1}`,
       n: index + 1,
-      text,
-      outcome: clampText(raw?.outcome),
+      date,
+      text: task,
+      task,
+      outcome: doneWhen,
+      doneWhen,
       estimatedMinutes,
+      minutes: estimatedMinutes,
       actualMinutes: boundedMinutes(raw?.actualMinutes, 0),
       priority: priority(raw?.priority),
       status: status(raw?.status),
+      isMust,
+      workType: type,
+      type,
+      start: startTime,
+      end: endTime,
+      ...(startTime ? { startTime } : {}),
+      ...(endTime ? { endTime } : {}),
     };
   });
+
+  // Keep exactly one must-do block. Legacy plans without the new flag promote their first item.
+  let mustAssigned = false;
+  for (const item of items) {
+    item.isMust = Boolean(item.isMust) && !mustAssigned;
+    if (item.isMust) mustAssigned = true;
+  }
+  if (items.length > 0 && !mustAssigned) {
+    items[0].isMust = true;
+    items[0].priority = 'HIGH';
+  }
 
   const minimumMinutes = boundedMinutes(input.minimumMinutes, 0);
   const idealMinutes = boundedMinutes(input.idealMinutes, 0);

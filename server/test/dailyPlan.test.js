@@ -29,6 +29,26 @@ test('buildDailyPlan rejects more than three priorities', () => {
   );
 });
 
+test('buildDailyPlan preserves time-block metadata and derives its duration', () => {
+  const plan = buildDailyPlan({
+    date: '2026-10-16',
+    input: {
+      items: [{
+        text: 'Study Chapter 4',
+        outcome: 'Complete the practice questions',
+        workType: 'Study',
+        startTime: '09:00',
+        endTime: '10:30',
+      }],
+    },
+  });
+
+  assert.equal(plan.items[0].workType, 'Study');
+  assert.equal(plan.items[0].startTime, '09:00');
+  assert.equal(plan.items[0].endTime, '10:30');
+  assert.equal(plan.items[0].estimatedMinutes, 90);
+});
+
 test('buildFallbackDailyPlan creates a transparent editable starter plan', () => {
   const plan = buildFallbackDailyPlan({
     date: '2026-10-16',

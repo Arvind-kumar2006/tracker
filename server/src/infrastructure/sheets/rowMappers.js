@@ -26,6 +26,29 @@ const shortId = (...parts) =>
     .join(':')
     .slice(0, 120);
 
+const planItemLabel = (item) => {
+  const task = item.task ?? item.text ?? '';
+  const schedule = (item.start ?? item.startTime) && (item.end ?? item.endTime)
+    ? ` ${item.start ?? item.startTime}-${item.end ?? item.endTime}`
+    : '';
+  const type = item.type ?? item.workType ?? '';
+  const must = item.isMust ? ' ★' : '';
+  return `${item.n}. ${task}${type ? ` [${type}]` : ''}${schedule}${must}`;
+};
+
+const planBlockJson = (doc) => JSON.stringify((doc.plan?.items ?? []).map((item) => ({
+  id: item.id,
+  date: item.date ?? doc.date,
+  task: item.task ?? item.text ?? '',
+  doneWhen: item.doneWhen ?? item.outcome ?? '',
+  type: item.type ?? item.workType ?? 'Other',
+  start: item.start ?? item.startTime ?? '',
+  end: item.end ?? item.endTime ?? '',
+  minutes: Number(item.minutes ?? item.estimatedMinutes ?? 0),
+  isMust: Boolean(item.isMust),
+  status: item.status ?? 'PLANNED',
+})));
+
 /**
  * The upsert key for a document.
  *
@@ -83,7 +106,7 @@ export function dailyLogRow(doc, syncedAt) {
     doc.weekday ?? '',
     bool(doc.hasData),
     p.summary ?? '',
-    (p.items ?? []).map((i) => `${i.n}. ${i.text}`).join(' | '),
+    (p.items ?? []).map(planItemLabel).join(' | '),
     p.isRepeat ? `REPEAT OF ${p.repeatOf}` : '',
     p.declaredHours ?? '',
     mins.genaiMinutes ?? '',
@@ -115,11 +138,18 @@ export function dailyLogRow(doc, syncedAt) {
     p.breakMinutes ?? '',
     p.bufferMinutes ?? '',
     (p.items ?? []).map((item) => {
-      const outcome = item.outcome ? ` → ${item.outcome}` : '';
+      const task = item.task ?? item.text ?? '';
+      const outcome = (item.doneWhen ?? item.outcome) ? ` → ${item.doneWhen ?? item.outcome}` : '';
       const actual = item.actualMinutes ? ` actual ${item.actualMinutes}m` : '';
       const state = item.status ? ` [${item.status}]` : '';
-      return `${item.n}. ${item.text} [${item.priority ?? 'MEDIUM'}] ${item.estimatedMinutes ?? '?'}m${actual}${state}${outcome}`;
+      const schedule = (item.start ?? item.startTime) && (item.end ?? item.endTime)
+        ? ` ${item.start ?? item.startTime}-${item.end ?? item.endTime}`
+        : '';
+      const type = item.type ?? item.workType ?? '';
+      const must = item.isMust ? ' ★' : '';
+      return `${item.n}. ${task}${type ? ` [${type}]` : ''}${schedule}${must} [${item.priority ?? 'MEDIUM'}] ${item.minutes ?? item.estimatedMinutes ?? '?'}m${actual}${state}${outcome}`;
     }).join(' | '),
+    planBlockJson(doc),
   ];
 }
 
