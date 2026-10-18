@@ -23,10 +23,29 @@ import { reflectionCoachPrompt } from '../../infrastructure/ai/prompts.js';
 import { SCHEMAS } from '../../infrastructure/ai/schemas.js';
 import { parseServiceAccount } from '../../infrastructure/sheets/googleSheetsClient.js';
 
+export function corsMiddleware(req, res, next) {
+  const origin = req.headers.origin;
+  const allowed = origin && config.http.corsOrigins.includes(origin);
+
+  if (allowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '600');
+    res.setHeader('Vary', 'Origin');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return allowed ? res.sendStatus(204) : res.sendStatus(403);
+  }
+  next();
+}
+
 export function createApp({ expressFactory = express } = {}) {
   const app = expressFactory();
 
   app.set('trust proxy', false);
+  app.use(corsMiddleware);
   // Mobile folder upload (Phase 4). Mounted FIRST, with its own larger JSON limit, because a
   // base64 spreadsheet easily exceeds the app-wide 1mb cap used for ordinary API calls.
   app.use(uploadRouter());

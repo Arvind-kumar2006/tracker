@@ -65,6 +65,10 @@ export const config = {
     port: int('PORT', 5555),
     rateLimitPerMinute: int('RATE_LIMIT_PER_MINUTE', 60),
     bodyLimit: optional('BODY_LIMIT', '1mb'),
+    corsOrigins: optional('CORS_ORIGINS', 'http://localhost:8081,http://127.0.0.1:8081')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   },
 
   // Excel file import configuration
