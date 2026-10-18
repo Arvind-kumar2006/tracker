@@ -1,273 +1,138 @@
 /**
- * RowMappers — Mongo document -> sheet row (a flat array of strings/numbers).
+ * Mongo document -> the compact tracker tabs.
  *
- * Pure functions with no I/O, so the projection is unit-testable without Google credentials.
- * Every mapper MUST return an array whose length and order match `headers` in sheetSchema.js.
- * The `length` assertion in the test suite enforces that coupling.
- *
- * Note these are projections, not copies: what belongs in the user's own columns stays in the
- * user's own columns. AI output only ever lands in AI_Insights (FR-6.3).
+ * The mappers are pure. They keep plan blocks as rows and repeat the day-level reflection on
+ * those rows, which makes filtering and analysis straightforward.
  */
 
 import { TABS } from './sheetSchema.js';
 
-const iso = (v) => (v instanceof Date ? v.toISOString() : v ?? null);
-const bool = (v) => (v === true ? 'YES' : v === false ? 'NO' : '');
-const joinList = (v) => (Array.isArray(v) ? v.join(' | ') : '');
-const joinDate = (v) => (Array.isArray(v) ? v.join(', ') : '');
+const iso = (value) => (value instanceof Date ? value.toISOString() : value ?? '');
+const bool = (value) => (value === true ? 'YES' : value === false ? 'NO' : '');
+const text = (value) => String(value ?? '').trim();
 
-/**
- * A short stable id from a natural key. Sheets has no unique constraint, so the id column makes
- * a row traceable back to its source and is itself the upsert key.
- */
-const shortId = (...parts) =>
-  parts
-    .filter(Boolean)
-    .join(':')
-    .slice(0, 120);
+const planItems = (doc) => Array.isArray(doc?.plan?.items) ? doc.plan.items.slice(0, 3) : [];
 
-const planItemLabel = (item) => {
-  const task = item.task ?? item.text ?? '';
-  const schedule = (item.start ?? item.startTime) && (item.end ?? item.endTime)
-    ? ` ${item.start ?? item.startTime}-${item.end ?? item.endTime}`
-    : '';
-  const type = item.type ?? item.workType ?? '';
-  const must = item.isMust ? ' ★' : '';
-  return `${item.n}. ${task}${type ? ` [${type}]` : ''}${schedule}${must}`;
+const blockCells = (item) => item ? [
+  item.id ?? '',
+  item.task ?? item.text ?? '',
+  item.doneWhen ?? item.outcome ?? '',
+  item.type ?? item.workType ?? '',
+  item.start ?? item.startTime ?? '',
+  item.end ?? item.endTime ?? '',
+  Number(item.minutes ?? item.estimatedMinutes) || 0,
+  bool(Boolean(item.isMust)),
+  item.status ?? 'PLANNED',
+] : Array(9).fill('');
+
+const blockerTexts = (doc) => {
+  const segments = doc?.blockers?.segments;
+  if (Array.isArray(segments) && segments.length) return segments.map(text).filter(Boolean);
+  const raw = text(doc?.blockers?.raw ?? doc?.blockers);
+  return raw ? [raw] : [];
 };
 
-const planBlockJson = (doc) => JSON.stringify((doc.plan?.items ?? []).map((item) => ({
-  id: item.id,
-  date: item.date ?? doc.date,
-  task: item.task ?? item.text ?? '',
-  doneWhen: item.doneWhen ?? item.outcome ?? '',
-  type: item.type ?? item.workType ?? 'Other',
-  start: item.start ?? item.startTime ?? '',
-  end: item.end ?? item.endTime ?? '',
-  minutes: Number(item.minutes ?? item.estimatedMinutes ?? 0),
-  isMust: Boolean(item.isMust),
-  status: item.status ?? 'PLANNED',
-})));
+const plannedMinutes = (doc) => planItems(doc).reduce(
+  (sum, item) => sum + (Number(item.minutes ?? item.estimatedMinutes) || 0),
+  0
+);
 
-/**
- * The upsert key for a document.
- *
- * Mirror input normally comes straight out of Mongo, where the natural key IS `_id`. But the
- * same mappers are exercised against raw normalised domain objects (which carry `date`,
- * `month` or `sha256` and no `_id`), so fall back rather than emitting a null key column — a
- * null key would be appended on every sync and silently break idempotency.
- */
-const docKey = (doc, ...fallbacks) => {
-  if (doc?._id !== null && doc?._id !== undefined && doc._id !== '') return doc._id;
-  for (const f of fallbacks) {
-    if (doc?.[f] !== null && doc?.[f] !== undefined && doc[f] !== '') return doc[f];
-  }
-  return '';
+const actualStudyHours = (doc) => {
+  const value = doc?.totalHoursComputed ?? doc?.totalHoursReported;
+  return value === null || value === undefined || value === '' ? '' : Number(value);
 };
 
-/* ------------------------------------------------------------------ */
-
-export function monthRow(doc) {
-  const m = doc.metrics ?? {};
-  return [
-    docKey(doc, 'month'),
-    doc.monthlyGoal ?? '',
-    doc.targetDailyHours ?? '',
-    m.daysLogged ?? '',
-    m.daysElapsed ?? '',
-    m.daysEmpty ?? '',
-    m.hoursTotal ?? '',
-    m.hoursAvgPerLoggedDay ?? '',
-    m.consistencyRate ?? '',
-    m.longest ?? '',
-    m.current ?? '',
-    m.daysTargetMet ?? '',
-    m.daysPartial ?? '',
-    m.daysMissed ?? '',
-    m.buildRate ?? '',
-    m.passiveLearningRatio ?? '',
-    m.lateStartRate ?? '',
-    m.trend?.direction ?? '',
-    // Surfaced so a unit misread is visible in the spreadsheet, not just in the API.
-    m.trend?.slopeHoursPerDay ?? '',
-    iso(doc.lastUpdated),
-  ];
-}
-
-export function dailyLogRow(doc, syncedAt) {
-  const p = doc.plan ?? {};
-  const mins = doc.minutes ?? {};
-  // synced_at must reflect when the SOURCE row last changed, not the moment of the sync.
-  // Stamping `new Date()` here would rewrite every row on every run, so a no-op re-sync would
-  // still mutate the sheet and the "sync is idempotent" guarantee would be unverifiable.
+/** One row per plan block, with the day-level reflection repeated on that row. */
+export function dailyTrackerRows(doc, syncedAt = undefined) {
+  const items = planItems(doc).length ? planItems(doc) : [null];
   const stamp = doc.updatedAt ?? doc.createdAt ?? syncedAt ?? '';
-  return [
-    docKey(doc, 'date'),
+  const rawBlockers = doc.blockers?.raw ?? (typeof doc.blockers === 'string' ? doc.blockers : blockerTexts(doc).join(' | '));
+  return items.map((item) => [
+    item?.id ?? `${doc.date}:reflection`,
+    doc.date ?? '',
     doc.weekday ?? '',
-    bool(doc.hasData),
-    p.summary ?? '',
-    (p.items ?? []).map(planItemLabel).join(' | '),
-    p.isRepeat ? `REPEAT OF ${p.repeatOf}` : '',
-    p.declaredHours ?? '',
-    mins.genaiMinutes ?? '',
-    mins.codingMinutes ?? '',
-    mins.englishMinutes ?? '',
-    mins.otherMinutes ?? '',
-    doc.totalHoursComputed === null || doc.totalHoursComputed === undefined ? '' : doc.totalHoursComputed,
-    doc.totalHoursReported ?? '',
-    doc.variancePct ?? '',
-    doc.targetMet ?? '',
+    ...blockCells(item),
     doc.accomplished ?? '',
-    doc.buildOutcome ?? '',
     doc.buildNote ?? '',
-    doc.blockers?.raw ?? '',
-    bool(doc.blockers?.machineWritten),
+    rawBlockers,
     doc.tomorrowChange ?? '',
-    (doc.timeBlocks ?? [])
-      .map((b) => `${b.start}-${b.end}${b.done ? ' [done]' : ''}${b.missed ? ' [missed]' : ''} ${b.label}`)
-      .join(' | '),
-    doc.sourceFile ?? '',
-    shortId(doc.date, doc.plan?.items?.length ?? 0, doc.totalHoursComputed ?? 'x'),
     iso(stamp),
-    bool(doc.floorHit),
-    doc.floorHitReason ?? '',
-    doc.planBend ?? '',
-    JSON.stringify(doc.focusSessions ?? []),
-    p.minimumMinutes ?? '',
-    p.idealMinutes ?? '',
-    p.breakMinutes ?? '',
-    p.bufferMinutes ?? '',
-    (p.items ?? []).map((item) => {
-      const task = item.task ?? item.text ?? '';
-      const outcome = (item.doneWhen ?? item.outcome) ? ` → ${item.doneWhen ?? item.outcome}` : '';
-      const actual = item.actualMinutes ? ` actual ${item.actualMinutes}m` : '';
-      const state = item.status ? ` [${item.status}]` : '';
-      const schedule = (item.start ?? item.startTime) && (item.end ?? item.endTime)
-        ? ` ${item.start ?? item.startTime}-${item.end ?? item.endTime}`
-        : '';
-      const type = item.type ?? item.workType ?? '';
-      const must = item.isMust ? ' ★' : '';
-      return `${item.n}. ${task}${type ? ` [${type}]` : ''}${schedule}${must} [${item.priority ?? 'MEDIUM'}] ${item.minutes ?? item.estimatedMinutes ?? '?'}m${actual}${state}${outcome}`;
-    }).join(' | '),
-    planBlockJson(doc),
-  ];
-}
-
-export function timeBlockRows(doc) {
-  return (doc.timeBlocks ?? []).map((b) => [
-    shortId(doc.date, b.seq),
-    doc.date,
-    b.seq,
-    b.start,
-    b.end,
-    b.durationMin,
-    bool(b.crossesMidnight),
-    b.label,
-    b.done ? 'YES' : '',
-    b.missed ? 'YES' : '',
-    b.meridiemAssumed ? 'ASSUMED' : '',
-    b.confidence ?? '',
   ]);
 }
 
-export function blockerRows(doc) {
-  const segments = doc.blockers?.segments ?? [];
-  if (segments.length === 0) return [];
-  return segments.map((text, i) => [
-    shortId(doc.date, i),
-    doc.date,
+export const dailyTrackerRow = (doc, syncedAt = undefined) => dailyTrackerRows(doc, syncedAt)[0];
+export const dailyLogRow = dailyTrackerRow;
+
+/** Unique obstacle rows. The second column is intentionally blank for manual writing. */
+export function obstacleRows(docs = []) {
+  const unique = new Map();
+  for (const doc of docs) {
+    for (const obstacle of blockerTexts(doc)) {
+      const original = obstacle.replace(/\s+/g, ' ').trim();
+      const key = original.toLocaleLowerCase();
+      if (original && !unique.has(key)) unique.set(key, [original, '']);
+    }
+  }
+  return [...unique.values()];
+}
+
+/** One row per day, with actual hours as the histogram source column. */
+export function studyHoursRow(doc, syncedAt = undefined) {
+  const actualHours = actualStudyHours(doc);
+  const planned = plannedMinutes(doc);
+  return [
+    doc.date ?? '',
     doc.weekday ?? '',
-    doc.blockers?.raw ?? '',
-    text,
-    '', // category — filled by the AI layer later
-    '', // severity
-    '', // days_repeated
-    bool(doc.blockers?.machineWritten),
-    'OPEN',
-  ]);
-}
-
-export function insightRow(doc) {
-  return [
-    docKey(doc, 'contentHash'),
-    iso(doc.generatedAt),
-    doc.month ?? '',
-    doc.section ?? '',
-    doc.title ?? '',
-    doc.body ?? '',
-    doc.severity ?? '',
-    joinDate(doc.evidenceDates),
-    joinList(doc.evidenceQuotes),
-    doc.action ?? '',
-    doc.constraintRef ?? '',
-    doc.model ?? '',
-    doc.tokens ?? '',
-    doc.costCredits ?? '',
-    doc.contentHash ?? '',
-    doc.status ?? 'OPEN',
-    doc.userResponse ?? '',
+    actualHours,
+    planned ? planned / 60 : '',
+    planned || '',
+    doc.targetMet ?? '',
+    doc.sourceFile ? 'imported' : 'app',
+    iso(doc.updatedAt ?? doc.createdAt ?? syncedAt ?? ''),
   ];
 }
 
-export function planCritiqueRow(doc) {
-  const a = doc.axes ?? {};
+const json = (value) => (Array.isArray(value) && value.length ? JSON.stringify(value) : '');
+
+export function weeklyPlanRow(doc, syncedAt = undefined) {
+  const answers = doc?.answers ?? {};
   return [
-    docKey(doc, 'date'),
-    doc.overall ?? '',
-    a.specific?.score ?? '',
-    a.timeboxed?.score ?? '',
-    a.measurable?.score ?? '',
-    a.realistic?.score ?? '',
-    joinList(doc.issues),
-    (doc.rewrittenBlocks ?? [])
-      .map((b) => `${b.start} (${b.durationMin}m) ${b.label}`)
-      .join(' | '),
-    doc.summary ?? '',
-    doc.userAccepted ? 'YES' : '',
-    iso(doc.updatedAt),
+    doc?.weekStart ?? doc?._id ?? '',
+    doc?.weekNumber ?? '',
+    doc?.weekStart ?? '',
+    doc?.weekEnd ?? '',
+    doc?.status ?? '',
+    doc?.image?.fileName ?? doc?.image?.sha256 ?? '',
+    answers.reviewLastWeek ?? '',
+    answers.blockers ?? '',
+    answers.plannedChange ?? doc?.plannedChange ?? '',
+    answers.successOutcomes ?? '',
+    answers.deliverables ?? '',
+    answers.fixedCommitments ?? '',
+    answers.fitAssessment ?? '',
+    json(doc?.outcomes),
+    json(doc?.commitments),
+    json(doc?.dailyBlocks),
+    json(doc?.extractedObstacles),
+    iso(doc?.confirmedAt),
+    iso(doc?.updatedAt ?? doc?.createdAt ?? syncedAt ?? ''),
   ];
 }
 
-export function importLogRow(doc) {
-  return [
-    docKey(doc, 'sha256'),
-    iso(doc.importedAt),
-    doc.fileName ?? '',
-    doc.sheetName ?? '',
-    doc.headerRow ?? '',
-    doc.rowsPopulated ?? '',
-    doc.rowsParsed ?? '',
-    doc.rowsQuarantined ?? '',
-    doc.daysWithData ?? '',
-    joinList(doc.months),
-    Object.entries(doc.unitDecisions ?? {})
-      .map(([k, v]) => `${k}=${v.unit}@${v.confidence}`)
-      .join(' | '),
-    doc.agreement?.agrees === undefined ? '' : doc.agreement.agrees ? 'YES' : 'NO',
-    doc.status ?? '',
-    doc.error ?? '',
-  ];
-}
-
-/** tab name -> mapper. Records-to-rows is 1:N for the child tabs. */
 export const MAPPERS = {
-  [TABS.MONTHS]: (doc) => [monthRow(doc)],
-  [TABS.DAILY_LOG]: (doc, now) => [dailyLogRow(doc, now)],
-  [TABS.TIME_BLOCKS]: timeBlockRows,
-  [TABS.BLOCKERS]: blockerRows,
-  [TABS.AI_INSIGHTS]: (doc) => [insightRow(doc)],
-  [TABS.PLAN_CRITIQUES]: (doc) => [planCritiqueRow(doc)],
-  [TABS.IMPORT_LOG]: (doc) => [importLogRow(doc)],
+  [TABS.DAILY_TRACKER]: dailyTrackerRows,
+  [TABS.OBSTACLES]: obstacleRows,
+  [TABS.STUDY_HOURS]: (doc, now) => [studyHoursRow(doc, now)],
+  [TABS.WEEKLY_PLANS]: (doc, now) => [weeklyPlanRow(doc, now)],
 };
 
-/** Flatten a set of documents into rows for one tab. */
+/** Flatten documents into rows for one tab. Obstacles are deduplicated across all days. */
 export function mapTab(tab, docs, now = undefined) {
   const mapper = MAPPERS[tab];
   if (!mapper) throw new Error(`no mapper registered for tab "${tab}"`);
-  return docs.flatMap((d) => mapper(d, now));
+  if (tab === TABS.OBSTACLES) return mapper(docs, now);
+  return docs.flatMap((doc) => mapper(doc, now));
 }
 
-/** The upsert key for a row: column 0 of every tab, by construction. */
+/** The first cell is the idempotent upsert key for every tab. */
 export const keyOfRow = (row) => (row?.[0] === null || row?.[0] === undefined ? '' : String(row[0]));
-
-export { TABS };

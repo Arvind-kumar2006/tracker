@@ -130,6 +130,15 @@ export const MonthRepository = {
       .sort({ _id: -1 })
       .toArray();
   },
+
+  async savePlan(month, plan) {
+    await getDb().collection('months').updateOne(
+      { _id: month },
+      { $set: { monthlyPlan: plan, lastUpdated: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+    return this.find(month);
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -298,6 +307,90 @@ export const SettingsRepository = {
     await getDb()
       .collection('settings')
       .updateOne({ _id: key }, { $set: { key, value, updatedAt: new Date() } }, { upsert: true });
+  },
+};
+
+/* ------------------------------------------------------------------ */
+
+export const WeeklyPlanRepository = {
+  async findByWeekStart(weekStart) {
+    return getDb().collection('weekly_plans').findOne({ _id: weekStart });
+  },
+
+  async list(limit = 100) {
+    return getDb()
+      .collection('weekly_plans')
+      .find({})
+      .sort({ weekStart: -1 })
+      .limit(limit)
+      .toArray();
+  },
+
+  async upsertDraft(weekStart, plan) {
+    await getDb().collection('weekly_plans').updateOne(
+      { _id: weekStart },
+      {
+        $set: {
+          ...plan,
+          _id: weekStart,
+          weekStart,
+          status: 'AWAITING_CONFIRMATION',
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+    return this.findByWeekStart(weekStart);
+  },
+
+  async confirm(weekStart, plan) {
+    await getDb().collection('weekly_plans').updateOne(
+      { _id: weekStart },
+      {
+        $set: {
+          ...plan,
+          _id: weekStart,
+          weekStart,
+          status: 'COMPLETED',
+          confirmedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+    return this.findByWeekStart(weekStart);
+  },
+
+  async markFailed(weekStart, { weekEnd = null, weekNumber = null } = {}) {
+    const existing = await this.findByWeekStart(weekStart);
+    if (existing?.status === 'COMPLETED') return existing;
+    await getDb().collection('weekly_plans').updateOne(
+      { _id: weekStart },
+      {
+        $set: {
+          weekStart,
+          status: 'FAILED_TO_SUBMIT',
+          updatedAt: new Date(),
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          weekEnd,
+          weekNumber,
+          answers: {},
+          outcomes: [],
+          commitments: [],
+          dailyBlocks: [],
+          extractedObstacles: [],
+          plannedChange: '',
+          unclearSections: [],
+          confidence: 'low',
+        },
+      },
+      { upsert: true }
+    );
+    return this.findByWeekStart(weekStart);
   },
 };
 

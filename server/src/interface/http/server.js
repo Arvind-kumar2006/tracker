@@ -16,6 +16,7 @@ import { uploadRouter } from './uploadRoute.js';
 import { dailyEntryRouter } from './dailyEntryRoute.js';
 import { dailyPlanRouter } from './dailyPlanRoute.js';
 import { focusSessionRouter } from './focusSessionRoute.js';
+import { weeklyPlanRouter } from './weeklyPlanRoute.js';
 import { REFLECTION_QUESTIONS } from '../../domain/entities/reflectionQuestions.js';
 import { buildReflectionCoachFallback } from '../../domain/services/ReflectionCoach.js';
 import { buildMechanicalReflectionQualityReport } from '../../infrastructure/ai/graphs/reflectionQualityGraph.js';
@@ -52,6 +53,7 @@ export function createApp({ expressFactory = express } = {}) {
   app.use(dailyEntryRouter());
   app.use(dailyPlanRouter());
   app.use(focusSessionRouter());
+  app.use(weeklyPlanRouter());
 
   /**
    * Every mutating route below takes JSON.
@@ -193,6 +195,21 @@ export function createApp({ expressFactory = express } = {}) {
     const doc = await container.monthRepository.find(req.params.month);
     if (!doc) return res.status(404).json({ error: 'month not found' });
     res.json(doc.metrics);
+  });
+
+  app.put('/api/months/:month/plan', async (req, res) => {
+    if (!/^\d{4}-\d{2}$/.test(req.params.month)) {
+      return res.status(400).json({ error: { code: 'INVALID_MONTH', message: 'month must be YYYY-MM' } });
+    }
+    await bootstrap();
+    const plan = req.body?.plan ?? req.body ?? {};
+    const clean = {
+      goal: String(plan.goal ?? '').trim().slice(0, 4000),
+      focusAreas: String(plan.focusAreas ?? '').trim().slice(0, 4000),
+      milestones: String(plan.milestones ?? '').trim().slice(0, 4000),
+    };
+    const saved = await container.monthRepository.savePlan(req.params.month, clean);
+    res.json(saved);
   });
 
   app.get('/api/quarantine', async (_req, res) => {

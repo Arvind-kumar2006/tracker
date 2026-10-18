@@ -15,6 +15,7 @@ import {
   InsightRepository,
   PlanCritiqueRepository,
   SettingsRepository,
+  WeeklyPlanRepository,
 } from '../../infrastructure/persistence/mongo/repositories.js';
 import { connect, close, ping, getDb } from '../../infrastructure/persistence/mongo/connection.js';
 import { importWorkbooks } from '../../application/useCases/importWorkbooks.js';
@@ -46,6 +47,7 @@ export const container = {
   insightRepository: InsightRepository,
   planCritiqueRepository: PlanCritiqueRepository,
   settingsRepository: SettingsRepository,
+  weeklyPlanRepository: WeeklyPlanRepository,
 
   // --- infrastructure singletons ---------------------------------------
   mongo: { connect, close, ping, getDb },
@@ -84,6 +86,7 @@ export const container = {
       insightRepository: InsightRepository,
       planCritiqueRepository: PlanCritiqueRepository,
       importLogRepository: ImportLogRepository,
+      weeklyPlanRepository: WeeklyPlanRepository,
       spreadsheetId: config.sheets.spreadsheetId,
       month,
     });

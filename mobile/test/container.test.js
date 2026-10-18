@@ -1,4 +1,4 @@
-/** Static integrity checks for the intentionally small two-screen mobile app. */
+/** Static integrity checks for the mobile planning and reflection app. */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,10 +65,15 @@ test('every relative import resolves and every package is declared', () => {
   assert.deepEqual([...missing], [], `undeclared packages: ${[...missing].join(', ')}`);
 });
 
-test('the container and API expose only daily plan/reflection operations', () => {
+test('the container and API expose daily and weekly/monthly planning operations', () => {
   const container = fs.readFileSync(path.join(ROOT, 'src/shared/container.js'), 'utf8');
   const api = fs.readFileSync(path.join(ROOT, 'src/infrastructure/apiClient.js'), 'utf8');
-  for (const [containerKey, apiKey] of [['loadDay', 'getDay'], ['loadReflectionCoach', 'getReflectionCoach'], ['loadSheetsStatus', 'getSheetsStatus'], ['saveDailyPlan', 'saveDailyPlan'], ['saveDailyEntry', 'saveDailyEntry']]) {
+  for (const [containerKey, apiKey] of [
+    ['loadDay', 'getDay'], ['loadReflectionCoach', 'getReflectionCoach'], ['loadSheetsStatus', 'getSheetsStatus'],
+    ['saveDailyPlan', 'saveDailyPlan'], ['saveDailyEntry', 'saveDailyEntry'], ['loadWeeklyStatus', 'getWeeklyStatus'],
+    ['loadWeeklyPlan', 'getWeeklyPlan'], ['extractWeeklyPlan', 'extractWeeklyPlan'], ['confirmWeeklyPlan', 'confirmWeeklyPlan'],
+    ['loadMonth', 'getMonth'], ['saveMonthPlan', 'saveMonthPlan'],
+  ]) {
     assert.match(container, new RegExp(`\\b${containerKey}\\s*:`));
     assert.match(api, new RegExp(`\\b${apiKey}\\s*:`));
   }
@@ -77,12 +82,15 @@ test('the container and API expose only daily plan/reflection operations', () =>
   }
 });
 
-test('the navigator exposes exactly the two daily screens', () => {
+test('the navigator exposes home, planning, reflection, and planning stack screens', () => {
   const app = fs.readFileSync(path.join(ROOT, 'App.js'), 'utf8');
-  assert.match(app, /component=\{SimplePlanScreen\}/);
+  assert.match(app, /component=\{HomeScreen\}/);
+  assert.match(app, /component=\{PlanningScreen\}/);
   assert.match(app, /component=\{SimpleReflectionScreen\}/);
+  assert.match(app, /name="WeeklyPlan" component=\{WeeklyPlanScreen\}/);
+  assert.match(app, /name="MonthlyPlan" component=\{MonthlyPlanScreen\}/);
   assert.match(app, /name="Settings" component=\{SettingsScreen\}/);
-  assert.equal((app.match(/<Tabs\.Screen/g) ?? []).length, 2);
+  assert.equal((app.match(/<Tabs\.Screen/g) ?? []).length, 3);
   assert.doesNotMatch(app, /Dashboard|Focus|Insights|Import|PlanCritique|ReflectionQuality/);
 });
 

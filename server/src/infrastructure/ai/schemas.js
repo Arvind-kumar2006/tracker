@@ -181,6 +181,51 @@ export const ReflectionCoachOutputSchema = z.object({
   tomorrowSuggestion: z.string().min(1).max(240),
 });
 
+/* ---------------- weekly handwritten plan extraction ---------------- */
+
+const WeeklyAnswerSchema = z.object({
+  reviewLastWeek: z.string().max(4000),
+  blockers: z.string().max(4000),
+  plannedChange: z.string().max(4000),
+  successOutcomes: z.string().max(4000),
+  deliverables: z.string().max(4000),
+  fixedCommitments: z.string().max(4000),
+  fitAssessment: z.string().max(4000),
+});
+
+const WeeklyOutcomeSchema = z.object({
+  outcome: z.string().max(500),
+  deliverable: z.string().max(700),
+  completionDay: z.string().max(40),
+});
+
+const WeeklyCommitmentSchema = z.object({
+  text: z.string().max(500),
+  day: z.string().max(40),
+  start: z.string().max(30),
+  hardStop: z.string().max(30),
+});
+
+const WeeklyBlockSchema = z.object({
+  day: z.string().max(40),
+  type: z.string().max(80),
+  action: z.string().max(500),
+  result: z.string().max(500),
+  start: z.string().max(30),
+  hardStop: z.string().max(30),
+});
+
+export const WeeklyPlanExtractionSchema = z.object({
+  answers: WeeklyAnswerSchema,
+  outcomes: z.array(WeeklyOutcomeSchema).max(3),
+  commitments: z.array(WeeklyCommitmentSchema).max(30),
+  dailyBlocks: z.array(WeeklyBlockSchema).max(100),
+  extractedObstacles: z.array(z.string().max(300)).max(30),
+  plannedChange: z.string().max(4000),
+  unclearSections: z.array(z.string().max(160)).max(20),
+  confidence: z.enum(['low', 'medium', 'high']),
+});
+
 export const SCHEMAS = {
   detectPatterns: DetectPatternsOutputSchema,
   critique: CritiqueOutputSchema,
@@ -190,4 +235,5 @@ export const SCHEMAS = {
   planGeneration: PlanGenerationOutputSchema,
   reflectionQuality: ReflectionQualityOutputSchema,
   reflectionCoach: ReflectionCoachOutputSchema,
+  weeklyPlanExtraction: WeeklyPlanExtractionSchema,
 };

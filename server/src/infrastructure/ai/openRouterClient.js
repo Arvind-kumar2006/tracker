@@ -35,6 +35,7 @@ const MODEL_MAP = {
   planGeneration: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
   reflectionQuality: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
   reflectionCoach: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
+  weeklyPlanExtraction: { primary: () => config.ai.fastModel, fallback: () => config.ai.fallbackFastModel },
 };
 
 export function createOpenRouterAdapter({ apiKey } = {}) {
@@ -96,7 +97,7 @@ export function createOpenRouterAdapter({ apiKey } = {}) {
    * genuinely down turns one outage into a large bill. Failures here are provider failures, so
    * they trip the breaker; they do not count against the input/data error budget.
    */
-  async function structured({ task, system, prompt, schema, temperature, maxTokens }) {
+  async function structured({ task, system, prompt, userContent = null, schema, temperature, maxTokens }) {
     const open = aiBreaker.guard();
     if (open) throw open;
 
@@ -124,7 +125,7 @@ export function createOpenRouterAdapter({ apiKey } = {}) {
 
           const result = await structuredLlm.invoke([
             { role: 'system', content: system },
-            { role: 'user', content: prompt },
+            { role: 'user', content: userContent ?? prompt },
           ]);
 
           const usage = extractUsage(result);

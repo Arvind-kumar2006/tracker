@@ -49,6 +49,24 @@ export function createApiClient() {
     getDay: (date) => request(endpoints.day(date)),
     getReflectionCoach: (date) => request(endpoints.reflectionCoach(date), { timeoutMs: config.aiTimeoutMs }),
     getSheetsStatus: () => request(endpoints.sheetsStatus),
+    getWeeklyStatus: (date) => request(endpoints.weeklyStatus(date)),
+    getWeeklyPlan: (weekStart) => request(endpoints.weeklyPlan(weekStart)),
+    extractWeeklyPlan: (weekStart, image) => request(endpoints.weeklyExtract(weekStart), {
+      method: 'POST',
+      body: { image },
+      timeoutMs: config.aiTimeoutMs,
+    }),
+    confirmWeeklyPlan: (weekStart, plan) => request(endpoints.weeklyConfirm(weekStart), {
+      method: 'PUT',
+      body: { plan },
+      timeoutMs: config.saveTimeoutMs,
+    }),
+    getMonth: (month) => request(endpoints.month(month)),
+    saveMonthPlan: (month, plan) => request(endpoints.monthPlan(month), {
+      method: 'PUT',
+      body: { plan },
+      timeoutMs: config.saveTimeoutMs,
+    }),
     saveDailyEntry: (entry) => request(endpoints.day(entry.date), {
       method: 'PUT',
       body: entry,

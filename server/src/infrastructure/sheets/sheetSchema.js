@@ -1,93 +1,68 @@
 /**
- * Sheet schema — the tab definitions for the accountability mirror.
+ * The deliberately small Google Sheets projection for the mobile tracker.
  *
- * Sheets is a PROJECTION of committed Mongo documents, not a second source of truth. Every tab
- * has a natural key so re-syncing updates in place instead of appending duplicates (FR-6.4).
+ * Mongo remains the source of truth. These three tabs are a human-readable mirror:
+ * - Daily_Tracker: one row per plan block, with the day's reflection repeated on that row;
+ * - Obstacles: unique obstacles discovered in reflections plus a manual solution column;
+ * - Study_Hours: one row per day, shaped for a study-hours histogram;
+ * - Weekly_Plans: one confirmed or failed weekly planning exercise per row.
  */
 
 export const TABS = {
-  MONTHS: 'Months',
-  DAILY_LOG: 'Daily_Log',
-  TIME_BLOCKS: 'Time_Blocks',
-  BLOCKERS: 'Blockers',
-  AI_INSIGHTS: 'AI_Insights',
-  PLAN_CRITIQUES: 'Plan_Critiques',
-  IMPORT_LOG: 'Import_Log',
+  DAILY_TRACKER: 'Daily_Tracker',
+  OBSTACLES: 'Obstacles',
+  STUDY_HOURS: 'Study_Hours',
+  WEEKLY_PLANS: 'Weekly_Plans',
 };
 
-/**
- * `key` is the column used for idempotent upsert. `headers` order MUST match `rowMappers`.
- */
 export const TAB_SCHEMA = {
-  [TABS.MONTHS]: {
-    key: 'month',
+  [TABS.DAILY_TRACKER]: {
+    key: 'record_id',
     headers: [
-      'month', 'monthly_goal', 'target_daily_hours', 'days_logged', 'days_elapsed', 'days_empty',
-      'hours_total', 'hours_avg', 'consistency_rate', 'longest_streak', 'current_streak',
-      'days_target_met', 'days_partial', 'days_missed', 'build_rate', 'passive_learning_rate',
-      'late_start_rate', 'trend', 'unit_warning', 'last_updated',
+      'record_id',
+      'date',
+      'weekday',
+      'block_id',
+      'task',
+      'done_when',
+      'type',
+      'start',
+      'end',
+      'minutes',
+      'must_do',
+      'status',
+      'accomplishment',
+      'built_finished_or_produced',
+      'obstacles',
+      'tomorrow_change',
+      'synced_at',
     ],
-    widths: [90, 280, 120, 100, 100, 90, 100, 100, 110, 110, 110, 110, 100, 100, 100, 130, 110, 90, 200, 150],
+    widths: [180, 100, 80, 180, 280, 320, 120, 100, 100, 110, 100, 150, 420, 420, 420, 420, 160],
   },
 
-  [TABS.DAILY_LOG]: {
+  [TABS.OBSTACLES]: {
+    key: 'obstacle',
+    headers: ['obstacle', 'solution'],
+    widths: [440, 560],
+    // The user owns this column. Sync may add a new obstacle but must never erase a solution.
+    preserveColumns: [1],
+  },
+
+  [TABS.STUDY_HOURS]: {
     key: 'date',
-    headers: [
-      'date', 'weekday', 'has_data', 'plan_summary', 'plan_items', 'plan_repeat', 'declared_hours',
-      'genai_min', 'coding_min', 'english_min', 'other_min', 'total_computed_h', 'total_reported_h',
-      'variance_pct', 'target_met', 'accomplished', 'build_outcome', 'build_note', 'blockers',
-      'machine_written_blockers', 'tomorrow_change', 'time_blocks', 'source_file', 'content_hash',
-      'synced_at', 'floor_hit', 'floor_hit_reason', 'plan_bend', 'focus_sessions',
-      'plan_minimum_min', 'plan_ideal_min', 'plan_break_min', 'plan_buffer_min', 'plan_tasks', 'plan_blocks',
-    ],
-    widths: [100, 80, 90, 300, 420, 100, 110, 90, 90, 90, 90, 110, 120, 100, 100, 420, 110, 300, 420, 130, 300, 360, 190, 120, 150, 90, 420, 420, 420, 100, 100, 100, 100, 520, 620],
+    headers: ['date', 'weekday', 'study_hours', 'planned_hours', 'planned_minutes', 'target_met', 'source', 'synced_at'],
+    widths: [100, 80, 110, 120, 130, 110, 110, 160],
   },
 
-  [TABS.TIME_BLOCKS]: {
-    key: 'blockId',
+  [TABS.WEEKLY_PLANS]: {
+    key: 'week_id',
     headers: [
-      'block_id', 'date', 'seq', 'start', 'end', 'duration_min', 'crosses_midnight', 'label',
-      'done', 'missed', 'meridiem_assumed', 'confidence',
+      'week_id', 'week_number', 'week_start', 'week_end', 'status', 'uploaded_image',
+      'answer_1_review', 'answer_2_blockers', 'answer_3_change', 'answer_4_outcomes',
+      'answer_5_deliverables', 'answer_6_commitments', 'answer_7_fit', 'weekly_outcomes',
+      'fixed_commitments', 'daily_time_blocks', 'extracted_obstacles', 'confirmed_at', 'synced_at',
     ],
-    widths: [150, 100, 50, 90, 90, 100, 120, 260, 60, 70, 120, 90],
-  },
-
-  [TABS.BLOCKERS]: {
-    key: 'blockerId',
-    headers: [
-      'blocker_id', 'date', 'weekday', 'raw_text', 'statement', 'category', 'severity',
-      'days_repeated', 'machine_written', 'status',
-    ],
-    widths: [150, 100, 80, 420, 420, 110, 90, 110, 120, 100],
-  },
-
-  [TABS.AI_INSIGHTS]: {
-    key: 'insightId',
-    headers: [
-      'insight_id', 'generated_at', 'month', 'section', 'title', 'body', 'severity',
-      'evidence_dates', 'evidence_quotes', 'action', 'constraint_ref', 'model', 'tokens',
-      'cost_credits', 'content_hash', 'status', 'user_response',
-    ],
-    widths: [200, 150, 80, 110, 260, 520, 90, 200, 420, 300, 240, 190, 80, 100, 110, 100, 200],
-  },
-
-  [TABS.PLAN_CRITIQUES]: {
-    key: 'date',
-    headers: [
-      'date', 'overall', 'axis_specific', 'axis_timeboxed', 'axis_measurable', 'axis_realistic',
-      'issues', 'rewritten_blocks', 'summary', 'user_accepted', 'updated_at',
-    ],
-    widths: [100, 80, 110, 110, 110, 110, 420, 420, 420, 110, 150],
-  },
-
-  [TABS.IMPORT_LOG]: {
-    key: 'sha256',
-    headers: [
-      'sha256', 'imported_at', 'file_name', 'sheet_name', 'header_row', 'rows_populated',
-      'rows_parsed', 'rows_quarantined', 'days_with_data', 'months', 'unit_decisions',
-      'agrees_with_user_summary', 'status', 'error',
-    ],
-    widths: [280, 150, 240, 140, 90, 110, 100, 120, 110, 120, 320, 170, 80, 200],
+    widths: [160, 110, 110, 110, 150, 220, 360, 360, 360, 360, 360, 360, 360, 500, 500, 600, 360, 180, 180],
   },
 };
 

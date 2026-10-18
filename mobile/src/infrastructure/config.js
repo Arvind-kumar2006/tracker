@@ -18,4 +18,10 @@ export const endpoints = {
   plan: (date) => `/api/days/${date}/plan`,
   reflectionCoach: (date) => `/api/reflection-coach/${date}`,
   sheetsStatus: '/api/sheets/status',
+  weeklyStatus: (date) => `/api/weeks/status?date=${encodeURIComponent(date)}`,
+  weeklyPlan: (weekStart) => `/api/weeks/${weekStart}`,
+  weeklyExtract: (weekStart) => `/api/weeks/${weekStart}/extract`,
+  weeklyConfirm: (weekStart) => `/api/weeks/${weekStart}/confirm`,
+  month: (month) => `/api/months/${month}`,
+  monthPlan: (month) => `/api/months/${month}/plan`,
 };

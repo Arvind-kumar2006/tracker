@@ -18,13 +18,10 @@ export const WORKBOOK_TITLE = 'Study Accountability Tracker';
 
 /** Tab order and initial sizing for a fresh workbook. */
 const CREATE_PLAN = [
-  { title: TABS.MONTHS, cols: 20, rows: 1000 },
-  { title: TABS.DAILY_LOG, cols: TAB_SCHEMA[TABS.DAILY_LOG].headers.length, rows: 2000 },
-  { title: TABS.TIME_BLOCKS, cols: 12, rows: 3000 },
-  { title: TABS.BLOCKERS, cols: 10, rows: 3000 },
-  { title: TABS.AI_INSIGHTS, cols: 17, rows: 2000 },
-  { title: TABS.PLAN_CRITIQUES, cols: 11, rows: 2000 },
-  { title: TABS.IMPORT_LOG, cols: 14, rows: 1000 },
+  { title: TABS.DAILY_TRACKER, cols: TAB_SCHEMA[TABS.DAILY_TRACKER].headers.length, rows: 2000 },
+  { title: TABS.OBSTACLES, cols: TAB_SCHEMA[TABS.OBSTACLES].headers.length, rows: 1000 },
+  { title: TABS.STUDY_HOURS, cols: TAB_SCHEMA[TABS.STUDY_HOURS].headers.length, rows: 2000 },
+  { title: TABS.WEEKLY_PLANS, cols: TAB_SCHEMA[TABS.WEEKLY_PLANS].headers.length, rows: 500 },
 ];
 
 /**
@@ -139,6 +136,42 @@ function buildSetupRequests(spreadsheet, plans) {
         },
       });
     });
+
+    // Keep the histogram source visible and ready for analysis. Existing charts are left alone
+    // so reconnecting cannot create duplicates.
+    if (plan.title === TABS.STUDY_HOURS && !sheet?.charts?.length) {
+      requests.push({
+        addChart: {
+          chart: {
+            spec: {
+              title: 'Study hours distribution',
+              histogramChart: {
+                series: [{
+                  data: {
+                    sourceRange: {
+                      sources: [{
+                        sheetId,
+                        startRowIndex: 1,
+                        endRowIndex: plan.rows,
+                        startColumnIndex: 2,
+                        endColumnIndex: 3,
+                      }],
+                    },
+                  },
+                }],
+              },
+            },
+            position: {
+              overlayPosition: {
+                anchorCell: { sheetId, rowIndex: 0, columnIndex: 10 },
+                widthPixels: 620,
+                heightPixels: 360,
+              },
+            },
+          },
+        },
+      });
+    }
   }
   return requests;
 }
@@ -173,11 +206,30 @@ export async function syncTab({ client, spreadsheetId, tab, docs, dryRun = false
   // Read ONLY the key column. Fetching full row width for 2,000 rows to learn one column wastes
   // quota and, more importantly, the API's response shape for a single column is
   // [[v1],[v2],...] — parseKeyColumn relies on that contract.
-  const existingValues = await client.readRange(spreadsheetId, `'${tab}'!${colLetter(0)}:${colLetter(0)}`);
-  const existingKeys = parseKeyColumn(existingValues);
+  const preserveColumns = schema.preserveColumns ?? [];
+  const existingRange = preserveColumns.length
+    ? `'${tab}'!A:${colLetter(Math.max(...preserveColumns) + 1)}`
+    : `'${tab}'!${colLetter(0)}:${colLetter(0)}`;
+  const existingValues = await client.readRange(spreadsheetId, existingRange);
+  const existingKeys = preserveColumns.length
+    ? parseKeyColumn(existingValues.map((row) => [row?.[0] ?? '']))
+    : parseKeyColumn(existingValues);
+  const existingRowsByKey = new Map(
+    existingValues.slice(1).map((row) => [keyOfRow(row), row])
+  );
+  const rowsWithPreservedColumns = rows.map((row) => {
+    const existing = existingRowsByKey.get(keyOfRow(row));
+    if (!existing) return row;
+    for (const index of preserveColumns) {
+      if (row[index] === '' || row[index] === null || row[index] === undefined) {
+        row[index] = existing[index] ?? row[index];
+      }
+    }
+    return row;
+  });
 
-  const { writes, updateCount } = planRangeUpdates({ rows, existingKeys, colCount });
-  const { appends } = planWrites({ rows, existingKeys });
+  const { writes, updateCount } = planRangeUpdates({ rows: rowsWithPreservedColumns, existingKeys, colCount });
+  const { appends } = planWrites({ rows: rowsWithPreservedColumns, existingKeys });
 
   if (dryRun) {
     return {
@@ -224,13 +276,10 @@ export async function syncMonth({ client, spreadsheetId, sources, dryRun = false
 
   const results = [];
   const plan = [
-    [TABS.MONTHS, sources.months],
-    [TABS.DAILY_LOG, sources.dailyLogs],
-    [TABS.TIME_BLOCKS, sources.dailyLogs],
-    [TABS.BLOCKERS, sources.dailyLogs],
-    [TABS.AI_INSIGHTS, sources.insights],
-    [TABS.PLAN_CRITIQUES, sources.planCritiques],
-    [TABS.IMPORT_LOG, sources.importLogs],
+    [TABS.DAILY_TRACKER, sources.dailyLogs],
+    [TABS.OBSTACLES, sources.dailyLogs],
+    [TABS.STUDY_HOURS, sources.dailyLogs],
+    [TABS.WEEKLY_PLANS, sources.weeklyPlans],
   ];
 
   for (const [tab, docs] of plan) {

@@ -13,6 +13,12 @@
     },
     "android": {
       "package": "com.arvindkumar.studytracker"
-    }
+    },
+    "plugins": [
+      ["expo-image-picker", {
+        "photosPermission": "Allow Study Accountability Tracker to choose your weekly planning sheet.",
+        "cameraPermission": "Allow Study Accountability Tracker to photograph your weekly planning sheet."
+      }]
+    ]
   }
 }
