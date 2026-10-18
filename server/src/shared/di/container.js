@@ -21,18 +21,27 @@ import { connect, close, ping, getDb } from '../../infrastructure/persistence/mo
 import { importWorkbooks } from '../../application/useCases/importWorkbooks.js';
 import { syncToSheets } from '../../application/useCases/syncToSheets.js';
 import { createSheetsClient } from '../../infrastructure/sheets/googleSheetsClient.js';
+import { logger } from '../logger.js';
 
 let ready = false;
+let connecting = null;
+const queuedSheetSyncs = new Map();
+const log = logger.child('sheets-queue');
 
 export async function bootstrap() {
   if (ready) return;
-  await connect();
-  ready = true;
+  if (!connecting) {
+    connecting = connect()
+      .then(() => { ready = true; })
+      .finally(() => { connecting = null; });
+  }
+  await connecting;
 }
 
 export async function shutdown() {
   await close();
   ready = false;
+  connecting = null;
 }
 
 export const container = {
@@ -90,6 +99,27 @@ export const container = {
       spreadsheetId: config.sheets.spreadsheetId,
       month,
     });
+  },
+
+  /**
+   * Queue a Sheets projection without making the user's database save wait for Google APIs.
+   * Mongo remains the source of truth; a later settings/manual sync can repair a failed job.
+   */
+  queueMonthToSheets(month) {
+    if (queuedSheetSyncs.has(month)) {
+      return Promise.resolve({ ok: true, value: { queued: true, deduplicated: true } });
+    }
+
+    const job = Promise.resolve()
+      .then(() => this.syncMonthToSheets(month))
+      .catch((error) => {
+        log.warn('background Sheets sync failed', { month, error: error?.message ?? String(error) });
+        return { ok: false, error };
+      })
+      .finally(() => queuedSheetSyncs.delete(month));
+
+    queuedSheetSyncs.set(month, job);
+    return Promise.resolve({ ok: true, value: { queued: true } });
   },
 };
 

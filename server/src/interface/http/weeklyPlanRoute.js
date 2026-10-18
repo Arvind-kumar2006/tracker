@@ -65,11 +65,13 @@ async function dailyLogsForWeek(weekStart) {
 async function statusForDate(date) {
   const currentWeekStart = weekStartForDate(date);
   const priorWeekStart = previousWeekStart(currentWeekStart);
-  const previous = await container.weeklyPlanRepository.markFailed(priorWeekStart, {
-    weekEnd: weekEndForStart(priorWeekStart),
-    weekNumber: weekNumberOfMonth(priorWeekStart),
-  });
-  const current = await container.weeklyPlanRepository.findByWeekStart(currentWeekStart);
+  const [previous, current] = await Promise.all([
+    container.weeklyPlanRepository.markFailed(priorWeekStart, {
+      weekEnd: weekEndForStart(priorWeekStart),
+      weekNumber: weekNumberOfMonth(priorWeekStart),
+    }),
+    container.weeklyPlanRepository.findByWeekStart(currentWeekStart),
+  ]);
   return {
     currentWeek: {
       weekStart: currentWeekStart,
@@ -192,9 +194,11 @@ export function weeklyPlanRouter() {
     const saved = await container.weeklyPlanRepository.confirm(req.params.weekStart, plan);
     let sheets = { synced: false, skipped: true };
     try {
-      const mirror = await container.syncMonthToSheets(req.params.weekStart.slice(0, 7));
+      const mirror = await container.queueMonthToSheets(req.params.weekStart.slice(0, 7));
       sheets = mirror?.ok
-        ? { synced: true, totals: mirror.value?.totals ?? null }
+        ? mirror.value?.queued
+          ? { synced: false, skipped: true, queued: true }
+          : { synced: true, totals: mirror.value?.totals ?? null }
         : { synced: false, error: mirror?.error?.message ?? 'Google Sheets sync failed' };
     } catch (error) {
       sheets = { synced: false, error: error.message };

@@ -15,7 +15,9 @@ import { WeeklyPlanScreen } from './src/interface/WeeklyPlanScreen.js';
 import { MonthlyPlanScreen } from './src/interface/MonthlyPlanScreen.js';
 import { colors, styles } from './src/interface/theme.js';
 
-const Stack = createNativeStackNavigator();
+const HomeStack = createNativeStackNavigator();
+const PlanningStack = createNativeStackNavigator();
+const ReflectionStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
 const navTheme = {
@@ -37,16 +39,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       <NavigationContainer theme={navTheme}>
-        <Stack.Navigator
-          initialRouteName="Main"
-          screenOptions={{ headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text }}
-        >
-          <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
-          <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="DailyPlan" component={SimplePlanScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="WeeklyPlan" component={WeeklyPlanScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="MonthlyPlan" component={MonthlyPlanScreen} options={{ headerShown: false }} />
-        </Stack.Navigator>
+        <MainTabs />
       </NavigationContainer>
     </SafeAreaProvider>
   );
@@ -74,9 +67,44 @@ function MainTabs() {
         ),
       })}
     >
-      <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="Planning" component={PlanningScreen} options={{ tabBarLabel: 'Plan' }} />
-      <Tabs.Screen name="Reflection" component={SimpleReflectionScreen} options={{ tabBarLabel: 'Reflect' }} />
+      <Tabs.Screen name="Home" component={HomeStackNavigator} options={{ tabBarLabel: 'Home' }} />
+      <Tabs.Screen name="Planning" component={PlanningStackNavigator} options={{ tabBarLabel: 'Plan' }} />
+      <Tabs.Screen name="Reflection" component={ReflectionStackNavigator} options={{ tabBarLabel: 'Reflect' }} />
     </Tabs.Navigator>
+  );
+}
+
+const stackOptions = { headerShown: false };
+
+function HomeStackNavigator() {
+  return (
+    <HomeStack.Navigator screenOptions={stackOptions}>
+      <HomeStack.Screen name="Home" component={HomeScreen} />
+      <HomeStack.Screen name="DailyPlan" component={SimplePlanScreen} />
+      <HomeStack.Screen name="WeeklyPlan" component={WeeklyPlanScreen} />
+      <HomeStack.Screen name="MonthlyPlan" component={MonthlyPlanScreen} />
+      <HomeStack.Screen name="Settings" component={SettingsScreen} />
+    </HomeStack.Navigator>
+  );
+}
+
+function PlanningStackNavigator() {
+  return (
+    <PlanningStack.Navigator screenOptions={stackOptions}>
+      <PlanningStack.Screen name="Planning" component={PlanningScreen} />
+      <PlanningStack.Screen name="DailyPlan" component={SimplePlanScreen} />
+      <PlanningStack.Screen name="WeeklyPlan" component={WeeklyPlanScreen} />
+      <PlanningStack.Screen name="MonthlyPlan" component={MonthlyPlanScreen} />
+      <PlanningStack.Screen name="Settings" component={SettingsScreen} />
+    </PlanningStack.Navigator>
+  );
+}
+
+function ReflectionStackNavigator() {
+  return (
+    <ReflectionStack.Navigator screenOptions={stackOptions}>
+      <ReflectionStack.Screen name="Reflection" component={SimpleReflectionScreen} />
+      <ReflectionStack.Screen name="Settings" component={SettingsScreen} />
+    </ReflectionStack.Navigator>
   );
 }

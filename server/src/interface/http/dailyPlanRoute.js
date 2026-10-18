@@ -11,7 +11,9 @@ import { logger } from '../../shared/logger.js';
 
 function syncResult(mirror) {
   return mirror?.ok
-    ? { synced: true, totals: mirror.value?.totals ?? null }
+    ? mirror.value?.queued
+      ? { synced: false, skipped: true, queued: true }
+      : { synced: true, totals: mirror.value?.totals ?? null }
     : { synced: false, error: mirror?.error?.message ?? 'Google Sheets sync failed' };
 }
 
@@ -181,7 +183,7 @@ export function dailyPlanRouter() {
         dailyLogRepository: container.dailyLogRepository,
         monthRepository: container.monthRepository,
       },
-      sheetsSync: (month) => container.syncMonthToSheets(month),
+      sheetsSync: (month) => container.queueMonthToSheets(month),
     });
     if (!result.ok) return res.status(400).json({ error: result.error.toJSON() });
     res.json(result.value);
@@ -303,7 +305,7 @@ export function dailyPlanRouter() {
         dailyLogRepository: container.dailyLogRepository,
         monthRepository: container.monthRepository,
       },
-      sheetsSync: (month) => container.syncMonthToSheets(month),
+      sheetsSync: (month) => container.queueMonthToSheets(month),
     });
     if (!result.ok) return res.status(400).json({ error: result.error.toJSON() });
     res.json(result.value);

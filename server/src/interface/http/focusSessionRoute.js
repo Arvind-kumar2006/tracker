@@ -80,7 +80,9 @@ export async function saveFocusSession({ date, payload, repositories, sheetsSync
     try {
       const mirror = await sheetsSync(existing.month);
       sheets = mirror?.ok
-        ? { synced: true, totals: mirror.value?.totals ?? null }
+        ? mirror.value?.queued
+          ? { synced: false, skipped: true, queued: true }
+          : { synced: true, totals: mirror.value?.totals ?? null }
         : { synced: false, error: mirror?.error?.message ?? 'Google Sheets sync failed' };
     } catch (e) {
       sheets = { synced: false, error: e.message };
@@ -102,7 +104,7 @@ export function focusSessionRouter() {
         dailyLogRepository: container.dailyLogRepository,
         monthRepository: container.monthRepository,
       },
-      sheetsSync: (month) => container.syncMonthToSheets(month),
+      sheetsSync: (month) => container.queueMonthToSheets(month),
     });
     if (!result.ok) return res.status(400).json({ error: result.error.toJSON() });
     res.json(result.value);

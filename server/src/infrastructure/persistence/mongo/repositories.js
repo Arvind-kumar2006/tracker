@@ -365,14 +365,15 @@ export const WeeklyPlanRepository = {
 
   async markFailed(weekStart, { weekEnd = null, weekNumber = null } = {}) {
     const existing = await this.findByWeekStart(weekStart);
-    if (existing?.status === 'COMPLETED') return existing;
+    if (existing?.status === 'COMPLETED' || existing?.status === 'FAILED_TO_SUBMIT') return existing;
+    const updatedAt = new Date();
     await getDb().collection('weekly_plans').updateOne(
       { _id: weekStart },
       {
         $set: {
           weekStart,
           status: 'FAILED_TO_SUBMIT',
-          updatedAt: new Date(),
+          updatedAt,
         },
         $setOnInsert: {
           createdAt: new Date(),
@@ -390,7 +391,24 @@ export const WeeklyPlanRepository = {
       },
       { upsert: true }
     );
-    return this.findByWeekStart(weekStart);
+    return {
+      ...(existing ?? {
+        _id: weekStart,
+        weekEnd,
+        weekNumber,
+        answers: {},
+        outcomes: [],
+        commitments: [],
+        dailyBlocks: [],
+        extractedObstacles: [],
+        plannedChange: '',
+        unclearSections: [],
+        confidence: 'low',
+      }),
+      weekStart,
+      status: 'FAILED_TO_SUBMIT',
+      updatedAt,
+    };
   },
 };
 
